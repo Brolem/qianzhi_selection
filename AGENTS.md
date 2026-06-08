@@ -42,3 +42,8 @@
 - 改动文件：`D:\Users\Desktop\GZAICp\AGENT.MD`。
 - 依据：用户在当前会话中明确要求“写一个AGENT.MD，在每次做功能修改或新增时，更新AGENT.MD”，并提供反猜测协作规则。
 - 验证：创建后读取 `D:\Users\Desktop\GZAICp\AGENT.MD` 确认内容写入。
+
+- 功能：执行 `项目执行计划.md` Step 6 地图可视化，新增网格细筛结果 HTML 地图生成能力。
+- 改动文件：`D:\Users\Desktop\GZAICp\qianzhi_selection\src\map_viz.py`；`D:\Users\Desktop\GZAICp\qianzhi_selection\tests\test_map_viz.py`；`D:\Users\Desktop\GZAICp\qianzhi_selection\requirements.txt`；`D:\Users\Desktop\GZAICp\qianzhi_selection\outputs\figures\convenience_grid_map.html`；`D:\Users\Desktop\GZAICp\qianzhi_selection\outputs\figures\light_food_grid_map.html`；`D:\Users\Desktop\GZAICp\qianzhi_selection\AGENTS.md`。
+- 依据：用户明确指令“PLEASE IMPLEMENT THIS PLAN”中的 Step 6 地图可视化实施计划；已读取 `outputs/results/grid_stage/grid_stage_score_result.csv` 和 `outputs/results/region_stage/region_stage_score_result.csv` 的真实字段名；首次运行 `python -m unittest tests.test_map_viz -v` 失败原因为 `ModuleNotFoundError: No module named 'src.map_viz'`。
+- 验证：已运行 `python -m unittest tests.test_map_viz -v`，结果为 4 个测试通过；已运行 `python src\map_viz.py`，生成 `outputs\figures\convenience_grid_map.html` 和 `outputs\figures\light_food_grid_map.html`；已运行 `python -c "import ast, pathlib; [ast.parse(p.read_text(encoding='utf-8'), filename=str(p)) for p in pathlib.Path('src').glob('*.py')]; print('syntax ok')"`，输出 `syntax ok`；已运行 `python -m unittest discover -s tests -v`，结果为 18 个测试通过。
