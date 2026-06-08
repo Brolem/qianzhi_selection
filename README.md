@@ -99,6 +99,7 @@ data/processed/osm_region/landuse_features.csv
 data/processed/osm_region/osm_boundaries.csv
 data/processed/osm_region/osm_places.csv
 outputs/results/metadata/osm_guizhou_layer_inventory.csv
+outputs/results/metadata/osm_guizhou_layer_inventory.md
 outputs/reports/osm_guizhou_processing_report.md
 ```
 
@@ -134,6 +135,12 @@ Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
 
 ```bash
 python src/official_pipeline.py
+```
+
+OSM 图层盘点与空间数据检查：
+
+```bash
+python src/osm_inventory.py
 ```
 
 OSM 空间数据处理：
