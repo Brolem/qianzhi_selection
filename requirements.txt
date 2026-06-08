@@ -1,0 +1,6 @@
+pandas
+streamlit
+geopandas
+fiona
+pyyaml
+openpyxl

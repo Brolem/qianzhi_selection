@@ -1,0 +1,47 @@
+project:
+  name: "黔址优选：基于公共数据与多因子融合的社区商业智能选址决策系统"
+  business_types:
+    - "社区便利店"
+    - "轻餐饮"
+  recommendation_granularity:
+    - "区域"
+    - "街道"
+    - "社区"
+    - "评价网格"
+
+paths:
+  raw_data: "data/raw"
+  raw_official_data: "data/raw/official"
+  raw_osm_data: "data/raw/osm_guizhou"
+  processed_data: "data/processed"
+  processed_official: "data/processed/official"
+  processed_osm_region: "data/processed/osm_region"
+  processed_site_selection: "data/processed/site_selection"
+  figures: "outputs/figures"
+  reports: "outputs/reports"
+  results: "outputs/results"
+  results_region_stage: "outputs/results/region_stage"
+  results_grid_stage: "outputs/results/grid_stage"
+  results_metadata: "outputs/results/metadata"
+
+spatial_data:
+  osm_guizhou:
+    gpkg_url: "https://download.geofabrik.de/asia/china/guizhou-latest-free.gpkg.zip"
+    shp_url: "https://download.geofabrik.de/asia/china/guizhou-latest-free.shp.zip"
+    extract_dir: "data/raw/osm_guizhou"
+    grid_size_m: 1000
+    selected_region_count: 5
+
+weights:
+  convenience_store:
+    consumption_potential: 0.25
+    traffic_accessibility: 0.25
+    competition_pressure_reversed: 0.20
+    synergy_business_score: 0.20
+    regional_development: 0.10
+  light_catering:
+    consumption_potential: 0.20
+    traffic_accessibility: 0.25
+    competition_pressure_reversed: 0.20
+    synergy_business_score: 0.25
+    regional_development: 0.10

@@ -1,0 +1,2 @@
+﻿region_id,region_name,employment_table1_records,employment_table2_records,labour_force_count,employed_population,unemployed_count,employment_stability,employed_rate,unit_employment_count,flexible_employment_count,startup_employment_count,farming_employment_count,labour_is_rate,high_salary_desire_rate,service_desire_rate,unemployed_rate,urban_hard_obt_empt_rate,registered_unemployment_rate
+520000,贵州省,10000.0,10000.0,9021.0,7185.0,1836.0,0.6019485038274183,0.796474891918856,4325.0,1420.0,726.0,361.0,0.7959,0.2177,0.1964,0.203525108081144,0.3421,0.33
