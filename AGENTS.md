@@ -18,7 +18,7 @@
 
 更新内容必须记录在下方“功能变更记录”中，至少包含：
 
-1. 日期。
+1. 日期、XX时XX分。
 2. 修改或新增的功能。
 3. 实际改动的文件路径。
 4. 依据的真实文件、日志、测试、配置或用户明确指令。
@@ -36,7 +36,7 @@
 
 ## 功能变更记录
 
-### 2026-06-08
+### 2026-06-08 15:36
 
 - 功能：新增本协作规则文件，并规定后续每次功能修改或新增时必须更新 `AGENT.MD`。
 - 改动文件：`D:\Users\Desktop\GZAICp\AGENT.MD`。
@@ -47,3 +47,10 @@
 - 改动文件：`D:\Users\Desktop\GZAICp\qianzhi_selection\src\map_viz.py`；`D:\Users\Desktop\GZAICp\qianzhi_selection\tests\test_map_viz.py`；`D:\Users\Desktop\GZAICp\qianzhi_selection\requirements.txt`；`D:\Users\Desktop\GZAICp\qianzhi_selection\outputs\figures\convenience_grid_map.html`；`D:\Users\Desktop\GZAICp\qianzhi_selection\outputs\figures\light_food_grid_map.html`；`D:\Users\Desktop\GZAICp\qianzhi_selection\AGENTS.md`。
 - 依据：用户明确指令“PLEASE IMPLEMENT THIS PLAN”中的 Step 6 地图可视化实施计划；已读取 `outputs/results/grid_stage/grid_stage_score_result.csv` 和 `outputs/results/region_stage/region_stage_score_result.csv` 的真实字段名；首次运行 `python -m unittest tests.test_map_viz -v` 失败原因为 `ModuleNotFoundError: No module named 'src.map_viz'`。
 - 验证：已运行 `python -m unittest tests.test_map_viz -v`，结果为 4 个测试通过；已运行 `python src\map_viz.py`，生成 `outputs\figures\convenience_grid_map.html` 和 `outputs\figures\light_food_grid_map.html`；已运行 `python -c "import ast, pathlib; [ast.parse(p.read_text(encoding='utf-8'), filename=str(p)) for p in pathlib.Path('src').glob('*.py')]; print('syntax ok')"`，输出 `syntax ok`；已运行 `python -m unittest discover -s tests -v`，结果为 18 个测试通过。
+
+### 2026-06-08 16:58
+
+- 功能：执行 `docs\项目执行计划.md` Step 7 Streamlit 页面整合，将 `src\app.py` 扩展为 8 页可演示 Web Demo，并接入地图 HTML 与模板报告展示。
+- 改动文件：`D:\Users\Desktop\GZAICp\qianzhi_selection\src\app.py`；`D:\Users\Desktop\GZAICp\qianzhi_selection\tests\test_app.py`；`D:\Users\Desktop\GZAICp\qianzhi_selection\AGENTS.md`。
+- 依据：用户明确指令“PLEASE IMPLEMENT THIS PLAN”中的 Step 7 Streamlit 页面整合实施计划；已读取 `src\app.py`、`src\report_generator.py`、`AGENTS.md` 和 Step 7 依赖输出文件的真实路径；首次运行 `python -m unittest tests.test_app -v` 失败原因为 `ImportError: cannot import name 'business_columns' from 'src.app'`。
+- 验证：已运行 `python -m unittest tests.test_app -v`，结果为 5 个测试通过；已运行 `python -m unittest discover -s tests -v`，结果为 23 个测试通过；已运行 `python -c "import ast, pathlib; [ast.parse(p.read_text(encoding='utf-8'), filename=str(p)) for p in pathlib.Path('src').glob('*.py')]; print('syntax ok')"`，输出 `syntax ok`；已运行 `src\app.py` 禁用表述扫描，无匹配输出；已运行 `python -m streamlit run src/app.py --server.headless true --server.port 8507 --server.address 127.0.0.1`，日志显示 `URL: http://127.0.0.1:8507` 和 `Uvicorn server started on 127.0.0.1:8507`，随后已停止服务。
