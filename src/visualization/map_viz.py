@@ -9,9 +9,9 @@ import folium
 import pandas as pd
 
 try:
-    from .config import get_path
+    from ..config import get_path
 except ImportError:
-    from config import get_path
+    from src.config import get_path
 
 
 GRID_STAGE_RESULT = get_path("results_grid_stage") / "grid_stage_score_result.csv"

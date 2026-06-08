@@ -13,12 +13,12 @@ import pandas as pd
 from shapely.geometry import box
 
 try:
-    from .config import ensure_output_dirs, get_path, load_config
+    from ..config import ensure_output_dirs, get_path, load_config
 except ImportError:
-    from config import ensure_output_dirs, get_path, load_config
+    from src.config import ensure_output_dirs, get_path, load_config
 
 try:
-    from .osm_guizhou_pipeline import (
+    from ..osm.pipeline import (
         LANDUSE_CLASSES,
         LANDUSE_OUTPUT_COLUMNS,
         POI_OUTPUT_COLUMNS,
@@ -30,7 +30,7 @@ try:
         require_columns,
     )
 except ImportError:
-    from osm_guizhou_pipeline import (
+    from src.osm.pipeline import (
         LANDUSE_CLASSES,
         LANDUSE_OUTPUT_COLUMNS,
         POI_OUTPUT_COLUMNS,

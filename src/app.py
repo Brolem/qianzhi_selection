@@ -6,20 +6,24 @@ Run after installing dependencies:
 
 from __future__ import annotations
 
+import sys
 from pathlib import Path
 from typing import Any
 
 import pandas as pd
 
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
+
 try:
     from .config import get_path
-    from .report_generator import generate_site_report
+    from .reporting.report_generator import generate_site_report
 except ImportError:
-    from config import get_path
-    from report_generator import generate_site_report
+    from src.config import get_path
+    from src.reporting.report_generator import generate_site_report
 
 
-PROJECT_ROOT = Path(__file__).resolve().parents[1]
 REGION_STAGE_RESULT = get_path("results_region_stage") / "region_stage_score_result.csv"
 GRID_STAGE_RESULT = get_path("results_grid_stage") / "grid_stage_score_result.csv"
 SELECTED_REGIONS = get_path("results_region_stage") / "selected_regions_for_grid_stage.csv"
@@ -150,13 +154,13 @@ def render_data_overview(st: Any) -> None:
 
     report_text = _read_optional_text(DATA_REASON_REPORT)
     if report_text is None:
-        _missing_output_message(st, DATA_REASON_REPORT, "python src/data_process.py")
+        _missing_output_message(st, DATA_REASON_REPORT, "python -m src.data.official_pipeline")
     else:
         st.markdown(report_text)
 
     inventory_df = _load_optional_table(OSM_LAYER_INVENTORY)
     if inventory_df is None:
-        _missing_output_message(st, OSM_LAYER_INVENTORY, "python src/osm_inventory.py")
+        _missing_output_message(st, OSM_LAYER_INVENTORY, "python -m src.osm.inventory")
     else:
         st.subheader("OSM 图层盘点")
         _display_dataframe(
@@ -174,13 +178,13 @@ def render_indicator_system(st: Any) -> None:
     weight_df = _load_optional_table(WEIGHT_TABLE)
 
     if indicator_df is None:
-        _missing_output_message(st, INDICATOR_TABLE, "python src/two_stage_site_selection.py --top-n 5 --grid-size-m 1000")
+        _missing_output_message(st, INDICATOR_TABLE, "python -m src.selection.two_stage --top-n 5 --grid-size-m 1000")
     else:
         st.subheader("五类指标")
         _display_dataframe(st, indicator_df, ["indicator", "meaning", "source_fields", "direction"])
 
     if weight_df is None:
-        _missing_output_message(st, WEIGHT_TABLE, "python src/two_stage_site_selection.py --top-n 5 --grid-size-m 1000")
+        _missing_output_message(st, WEIGHT_TABLE, "python -m src.selection.two_stage --top-n 5 --grid-size-m 1000")
     else:
         st.subheader("便利店和轻餐饮权重对比")
         _display_dataframe(st, weight_df, ["indicator", "convenience_store_weight", "light_catering_weight"])
@@ -212,7 +216,7 @@ def render_region_stage(st: Any, business_type: str) -> None:
         )
 
     if region_df is None:
-        _missing_output_message(st, REGION_STAGE_RESULT, "python src/two_stage_site_selection.py --top-n 5 --grid-size-m 1000")
+        _missing_output_message(st, REGION_STAGE_RESULT, "python -m src.selection.two_stage --top-n 5 --grid-size-m 1000")
         return
 
     display = _format_score_columns(top_rows(region_df, rank_col, 30), [score_col])
@@ -230,7 +234,7 @@ def render_grid_stage(st: Any, business_type: str) -> None:
     score_col, rank_col = business_columns(business_type)
 
     if grid_df is None:
-        _missing_output_message(st, GRID_STAGE_RESULT, "python src/two_stage_site_selection.py --top-n 5 --grid-size-m 1000")
+        _missing_output_message(st, GRID_STAGE_RESULT, "python -m src.selection.two_stage --top-n 5 --grid-size-m 1000")
         return
 
     filtered = grid_df.copy()
@@ -268,7 +272,7 @@ def render_map_page(st: Any, components: Any, business_type: str) -> None:
     st.header("地图展示")
     map_path = map_file_for_business(business_type)
     if not map_path.exists():
-        _missing_output_message(st, map_path, "python src/map_viz.py")
+        _missing_output_message(st, map_path, "python -m src.visualization.map_viz")
         return
     components.html(map_path.read_text(encoding="utf-8"), height=640, scrolling=True)
 
@@ -278,7 +282,7 @@ def render_report_page(st: Any, business_type: str) -> None:
     st.header("智能报告")
     grid_df = _load_optional_table(GRID_STAGE_RESULT)
     if grid_df is None:
-        _missing_output_message(st, GRID_STAGE_RESULT, "python src/two_stage_site_selection.py --top-n 5 --grid-size-m 1000")
+        _missing_output_message(st, GRID_STAGE_RESULT, "python -m src.selection.two_stage --top-n 5 --grid-size-m 1000")
         return
 
     id_column = "grid_id" if "grid_id" in grid_df.columns else "region_id"
@@ -289,10 +293,12 @@ def render_report_page(st: Any, business_type: str) -> None:
 
     selected_grid_id = st.selectbox("选择 grid_id", grid_ids)
     try:
-        report_text = generate_site_report(selected_grid_id, business_type)
-    except (KeyError, FileNotFoundError, ValueError) as exc:
+        report_text = generate_site_report(selected_grid_id, business_type, use_llm=True)
+    except (KeyError, FileNotFoundError, ValueError, RuntimeError) as exc:
         st.error(str(exc))
-        return
+        if not st.button("使用模板报告兜底"):
+            return
+        report_text = generate_site_report(selected_grid_id, business_type, use_llm=False)
 
     st.markdown(report_text)
     st.download_button(

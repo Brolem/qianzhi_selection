@@ -31,6 +31,20 @@ qianzhi_selection/
 │   ├── reports/               # Markdown/Word 报告
 │   └── figures/               # 地图 HTML、截图、图表
 ├── src/
+│   ├── data/                 # 官方数据读取与处理
+│   │   ├── preprocess.py
+│   │   └── official_pipeline.py
+│   ├── osm/                  # OSM 图层盘点与空间数据处理
+│   │   ├── inventory.py
+│   │   └── pipeline.py
+│   ├── selection/            # 两阶段选址评分
+│   │   └── two_stage.py
+│   ├── visualization/        # 地图 HTML 生成
+│   │   └── map_viz.py
+│   ├── reporting/            # 报告生成
+│   │   └── report_generator.py
+│   ├── app.py                # Streamlit 页面入口
+│   └── config.py             # 配置读取
 ├── tests/
 └── docs/
 ```
@@ -134,31 +148,31 @@ Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
 官方数据背景处理：
 
 ```bash
-python src/official_pipeline.py
+python -m src.data.official_pipeline
 ```
 
 OSM 图层盘点与空间数据检查：
 
 ```bash
-python src/osm_inventory.py
+python -m src.osm.inventory
 ```
 
 OSM 空间数据处理：
 
 ```bash
-python src/osm_guizhou_pipeline.py --no-download
+python -m src.osm.pipeline --no-download
 ```
 
 两阶段选址推荐：
 
 ```bash
-python src/two_stage_site_selection.py --top-n 5 --grid-size-m 1000
+python -m src.selection.two_stage --top-n 5 --grid-size-m 1000
 ```
 
 生成一份网格报告：
 
 ```bash
-python src/report_generator.py
+python -m src.reporting.report_generator
 ```
 
 启动页面：
@@ -171,7 +185,7 @@ streamlit run src/app.py
 
 ```bash
 python -m unittest discover -s tests -v
-python -c "import ast, pathlib; [ast.parse(p.read_text(encoding='utf-8'), filename=str(p)) for p in pathlib.Path('src').glob('*.py')]; print('syntax ok')"
+python -c "import ast, pathlib; [ast.parse(p.read_text(encoding='utf-8'), filename=str(p)) for p in pathlib.Path('src').rglob('*.py')]; print('syntax ok')"
 ```
 
 检查关键输出：

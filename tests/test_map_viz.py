@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pandas as pd
 
-from src.map_viz import (
+from src.visualization.map_viz import (
     build_grid_map,
     build_region_map,
     load_grid_result,

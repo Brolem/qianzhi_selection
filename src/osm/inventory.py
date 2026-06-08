@@ -1,4 +1,4 @@
-"""Independent OSM GPKG layer inventory for Step 3."""
+"""OSM GPKG layer inventory for Step 3."""
 
 from __future__ import annotations
 
@@ -11,9 +11,9 @@ from typing import Any
 import fiona
 
 try:
-    from .config import ensure_output_dirs, get_path
+    from ..config import ensure_output_dirs, get_path
 except ImportError:
-    from config import ensure_output_dirs, get_path
+    from src.config import ensure_output_dirs, get_path
 
 
 POI_LAYERS = {

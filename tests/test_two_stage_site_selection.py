@@ -6,7 +6,7 @@ import geopandas as gpd
 import pandas as pd
 from shapely.geometry import LineString, MultiPoint, Point, Polygon
 
-from src.two_stage_site_selection import (
+from src.selection.two_stage import (
     build_metric_evaluation_grid,
     build_grid_stage_scoring_input,
     build_region_stage_scoring_input,

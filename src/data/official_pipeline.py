@@ -8,14 +8,14 @@ from typing import Any
 import pandas as pd
 
 try:
-    from .config import ensure_output_dirs, get_path
+    from ..config import ensure_output_dirs, get_path
 except ImportError:
-    from config import ensure_output_dirs, get_path
+    from src.config import ensure_output_dirs, get_path
 
 try:
-    from .data_process import build_field_profile_table, profile_dataframe, read_table
+    from .preprocess import build_field_profile_table, profile_dataframe, read_table
 except ImportError:
-    from data_process import build_field_profile_table, profile_dataframe, read_table
+    from src.data.preprocess import build_field_profile_table, profile_dataframe, read_table
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]

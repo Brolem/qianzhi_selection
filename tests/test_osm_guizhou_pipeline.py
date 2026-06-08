@@ -5,7 +5,7 @@ from pathlib import Path
 import geopandas as gpd
 from shapely.geometry import LineString, Point, Polygon
 
-from src.osm_guizhou_pipeline import (
+from src.osm.pipeline import (
     build_grid_regions,
     classify_poi_counts,
     classify_road_type,

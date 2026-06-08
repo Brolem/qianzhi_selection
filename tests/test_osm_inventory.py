@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pandas as pd
 
-from src.osm_inventory import classify_layer_group, write_inventory_outputs
+from src.osm.inventory import classify_layer_group, write_inventory_outputs
 
 
 class OsmInventoryTests(unittest.TestCase):

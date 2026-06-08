@@ -1,4 +1,6 @@
 import tempfile
+import runpy
+import sys
 import unittest
 from pathlib import Path
 
@@ -43,6 +45,34 @@ class AppHelperTests(unittest.TestCase):
             self.assertEqual(loaded["region_id"].astype(str).tolist(), ["8316193"])
             with self.assertRaises(FileNotFoundError):
                 load_table(Path(tmp_dir) / "missing.csv")
+
+    def test_app_script_imports_when_streamlit_runs_file_path(self):
+        project_root = Path(__file__).resolve().parents[1]
+        src_dir = project_root / "src"
+        original_path = list(sys.path)
+        removed_modules = {
+            name: sys.modules.pop(name)
+            for name in list(sys.modules)
+            if name == "src"
+            or name.startswith("src.")
+            or name == "config"
+            or name.startswith("reporting")
+        }
+
+        try:
+            filtered_path = [
+                entry
+                for entry in original_path
+                if Path(entry or ".").resolve() != project_root
+            ]
+            sys.path[:] = [str(src_dir), *filtered_path]
+
+            namespace = runpy.run_path(str(src_dir / "app.py"), run_name="streamlit_app")
+
+            self.assertTrue(callable(namespace["main"]))
+        finally:
+            sys.path[:] = original_path
+            sys.modules.update(removed_modules)
 
 
 if __name__ == "__main__":

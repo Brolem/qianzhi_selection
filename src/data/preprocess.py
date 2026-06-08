@@ -1,4 +1,4 @@
-"""Data loading and profiling utilities for Qianzhi Selection.
+"""Data preprocessing and profiling utilities for Qianzhi Selection.
 
 This module supports generic table loading and field profiling. It does not
 map official field meanings, convert units, or merge official datasets until
@@ -13,9 +13,9 @@ from typing import Any
 import pandas as pd
 
 try:
-    from .config import get_path
+    from ..config import get_path
 except ImportError:
-    from config import get_path
+    from src.config import get_path
 
 
 SUPPORTED_TABLE_SUFFIXES = {".csv", ".xlsx", ".xls"}

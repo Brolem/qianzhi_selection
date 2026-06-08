@@ -19,9 +19,9 @@ import pandas as pd
 from shapely.geometry import box
 
 try:
-    from .config import ensure_output_dirs, get_path
+    from ..config import ensure_output_dirs, get_path
 except ImportError:
-    from config import ensure_output_dirs, get_path
+    from src.config import ensure_output_dirs, get_path
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
