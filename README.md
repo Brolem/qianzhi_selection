@@ -51,7 +51,35 @@ data/raw/osm_guizhou/guizhou.gpkg
 
 官方数据用于贵州整体市场背景说明；OSM 数据用于区域和 1km 评价网格之间的空间差异计算。
 
-## 4. 主要输出
+## 4. 项目配置说明
+
+项目路径、默认参数和业态权重统一写在 `config.yaml` 中，代码通过 `src/config.py` 读取。
+
+当前规范路径：
+
+```text
+paths.raw_official_data        data/raw/official
+paths.raw_osm_data             data/raw/osm_guizhou
+paths.processed_official       data/processed/official
+paths.processed_osm_region     data/processed/osm_region
+paths.processed_site_selection data/processed/site_selection
+paths.results_region_stage     outputs/results/region_stage
+paths.results_grid_stage       outputs/results/grid_stage
+paths.results_metadata         outputs/results/metadata
+paths.figures                  outputs/figures
+paths.reports                  outputs/reports
+```
+
+默认模型参数：
+
+```text
+model_defaults.top_n       5
+model_defaults.grid_size_m 1000
+```
+
+便利店和轻餐饮两套权重位于 `weights.convenience_store` 和 `weights.light_catering`。后续调整权重时优先修改 `config.yaml`，不要在业务脚本中写死新权重。
+
+## 5. 主要输出
 
 官方背景处理：
 
@@ -85,7 +113,7 @@ outputs/results/grid_stage/grid_stage_score_result.csv
 outputs/reports/two_stage_site_selection_report.md
 ```
 
-## 5. 环境配置
+## 6. 环境配置
 
 ```powershell
 python -m venv .venv
@@ -100,7 +128,7 @@ Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
 .\.venv\Scripts\Activate.ps1
 ```
 
-## 6. 程序执行方法
+## 7. 程序执行方法
 
 官方数据背景处理：
 
@@ -132,7 +160,7 @@ python src/report_generator.py
 streamlit run src/app.py
 ```
 
-## 7. 验证方法
+## 8. 验证方法
 
 ```bash
 python -m unittest discover -s tests -v
@@ -148,7 +176,7 @@ Test-Path outputs\results\region_stage\region_stage_score_result.csv
 Test-Path outputs\results\grid_stage\grid_stage_score_result.csv
 ```
 
-## 8. 当前限制
+## 9. 当前限制
 
 - 官方数据不提供可确认的细粒度空间区域字段。
 - 就业地址文本不用于空间推断。

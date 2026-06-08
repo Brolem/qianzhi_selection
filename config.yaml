@@ -32,6 +32,10 @@ spatial_data:
     grid_size_m: 1000
     selected_region_count: 5
 
+model_defaults:
+  top_n: 5
+  grid_size_m: 1000
+
 weights:
   convenience_store:
     consumption_potential: 0.25

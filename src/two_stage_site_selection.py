@@ -13,9 +13,9 @@ import pandas as pd
 from shapely.geometry import box
 
 try:
-    from .config import ensure_output_dirs, get_path
+    from .config import ensure_output_dirs, get_path, load_config
 except ImportError:
-    from config import ensure_output_dirs, get_path
+    from config import ensure_output_dirs, get_path, load_config
 
 try:
     from .osm_guizhou_pipeline import (
@@ -44,6 +44,7 @@ except ImportError:
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
+PROJECT_CONFIG = load_config()
 PROCESSED_OSM_REGION_DIR = get_path("processed_osm_region")
 PROCESSED_SITE_SELECTION_DIR = get_path("processed_site_selection")
 REGION_STAGE_RESULTS_DIR = get_path("results_region_stage")
@@ -51,6 +52,7 @@ GRID_STAGE_RESULTS_DIR = get_path("results_grid_stage")
 METADATA_DIR = get_path("results_metadata")
 REPORTS_DIR = get_path("reports")
 OSM_GPKG_PATH = get_path("raw_osm_data") / "guizhou.gpkg"
+MODEL_DEFAULTS = PROJECT_CONFIG.get("model_defaults", {})
 
 BOUNDARY_LAYER = "gis_osm_adminareas_a_free"
 POI_POINT_LAYER = "gis_osm_pois_free"
@@ -69,20 +71,8 @@ ACTIVE_INDICATORS = [
     "regional_development",
 ]
 
-CONVENIENCE_SPATIAL_WEIGHTS = {
-    "consumption_potential": 0.25,
-    "traffic_accessibility": 0.25,
-    "competition_pressure_reversed": 0.20,
-    "synergy_business_score": 0.20,
-    "regional_development": 0.10,
-}
-LIGHT_CATERING_SPATIAL_WEIGHTS = {
-    "consumption_potential": 0.20,
-    "traffic_accessibility": 0.25,
-    "competition_pressure_reversed": 0.20,
-    "synergy_business_score": 0.25,
-    "regional_development": 0.10,
-}
+CONVENIENCE_SPATIAL_WEIGHTS = PROJECT_CONFIG["weights"]["convenience_store"]
+LIGHT_CATERING_SPATIAL_WEIGHTS = PROJECT_CONFIG["weights"]["light_catering"]
 SPATIAL_INDICATOR_LABELS = {
     "traffic_accessibility": "交通可达性",
     "consumption_potential": "消费潜力",
@@ -682,9 +672,19 @@ def run_two_stage_site_selection(
 def parse_args() -> argparse.Namespace:
     """Parse command-line options."""
     parser = argparse.ArgumentParser(description="执行两阶段商业选址推荐流程。")
-    parser.add_argument("--top-n", type=int, default=5, help="进入 1km 网格细筛的区域数量。")
+    parser.add_argument(
+        "--top-n",
+        type=int,
+        default=int(MODEL_DEFAULTS.get("top_n", 5)),
+        help="进入 1km 网格细筛的区域数量。",
+    )
     parser.add_argument("--region-id", action="append", default=None, help="手动指定进入网格细筛的真实 region_id。")
-    parser.add_argument("--grid-size-m", type=int, default=1000, help="评价网格边长，单位为米。")
+    parser.add_argument(
+        "--grid-size-m",
+        type=int,
+        default=int(MODEL_DEFAULTS.get("grid_size_m", 1000)),
+        help="评价网格边长，单位为米。",
+    )
     return parser.parse_args()
 
 
