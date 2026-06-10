@@ -1,5 +1,9 @@
 project:
-  name: "黔址优选：基于公共数据与多因子融合的社区商业智能选址决策系统"
+  name: "黔址优选"
+  city: "贵阳市"
+  grid_size_m: 1000
+  default_radius_m: 500
+  optional_radius_m: [500, 800, 1000]
   business_types:
     - "社区便利店"
     - "轻餐饮"
@@ -8,6 +12,24 @@ project:
     - "街道"
     - "社区"
     - "评价网格"
+
+target_districts:
+  first_version:
+    - "云岩区"
+    - "南明区"
+    - "观山湖区"
+  optional_enhancement:
+    - "花溪区"
+    - "白云区"
+
+data_paths:
+  official_raw_dir: "data/raw/official"
+  processed_dir: "data/processed"
+  results_dir: "outputs/results"
+  reports_dir: "outputs/reports"
+  figures_dir: "outputs/figures"
+  amap_cache_dir: "data/cache/amap"
+  demo_dir: "data/demo"
 
 paths:
   raw_data: "data/raw"
@@ -36,7 +58,38 @@ model_defaults:
   top_n: 5
   grid_size_m: 1000
 
+poi_categories:
+  convenience_store: "便利店"
+  supermarket: "超市"
+  restaurant: "餐饮"
+  fast_food: "快餐"
+  snack: "小吃"
+  cafe: "咖啡"
+  tea: "茶饮"
+  school: "学校"
+  hospital: "医院"
+  mall: "商场"
+  office: "写字楼"
+  residential: "小区"
+  bus_stop: "公交站"
+  subway_station: "地铁站"
+  parking: "停车场"
+
 weights:
+  convenience:
+    traffic_accessibility: 0.1666666667
+    consumption_potential: 0.1666666667
+    employment_customer_proxy: 0.1666666667
+    synergy_score: 0.1666666667
+    competition_pressure: 0.1666666667
+    business_atmosphere: 0.1666666667
+  light_food:
+    traffic_accessibility: 0.1666666667
+    consumption_potential: 0.1666666667
+    employment_customer_proxy: 0.1666666667
+    synergy_score: 0.1666666667
+    competition_pressure: 0.1666666667
+    business_atmosphere: 0.1666666667
   convenience_store:
     consumption_potential: 0.25
     traffic_accessibility: 0.25
