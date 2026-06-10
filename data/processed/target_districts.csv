@@ -1,0 +1,4 @@
+﻿district_name,city_name,adcode,center_lon,center_lat,has_boundary,data_source
+云岩区,贵阳市,520103,106.724394,26.604604,True,amap_api
+南明区,贵阳市,520102,106.714305,26.568055,True,amap_api
+观山湖区,贵阳市,520115,106.598978,26.616134,True,amap_api
