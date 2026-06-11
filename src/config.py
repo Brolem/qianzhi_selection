@@ -101,3 +101,12 @@ def get_poi_categories(config: dict[str, Any] | None = None) -> dict[str, str]:
     if not isinstance(categories, dict):
         raise KeyError("config.yaml 缺少 poi_categories")
     return dict(categories)
+
+
+def get_poi_typecodes(config: dict[str, Any] | None = None) -> dict[str, str]:
+    """Return configured Amap POI typecodes for comparison queries."""
+    cfg = config or load_config()
+    typecodes = cfg.get("poi_typecodes")
+    if not isinstance(typecodes, dict):
+        raise KeyError("config.yaml 缺少 poi_typecodes")
+    return dict(typecodes)

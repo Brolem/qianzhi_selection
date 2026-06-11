@@ -114,6 +114,45 @@ class AmapClientTests(unittest.TestCase):
         )
         self.assertTrue(polygon_cache_key.endswith(".json"))
 
+    def test_search_poi_around_accepts_typecodes_without_keywords(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            client = AmapClient(api_key="test-key", cache_dir=tmp_dir)
+
+            with patch.object(client, "_request_with_cache", return_value={"status": "1"}) as request:
+                result = client.search_poi_around(
+                    "106.713478,26.578343",
+                    types="060200|060400",
+                    radius=500,
+                    city="贵阳市",
+                    page=1,
+                    offset=25,
+                )
+
+        self.assertEqual(result, {"status": "1"})
+        url, params, cache_key = request.call_args.args
+        self.assertEqual(url, "https://restapi.amap.com/v5/place/around")
+        self.assertEqual(
+            params,
+            {
+                "key": "test-key",
+                "location": "106.713478,26.578343",
+                "types": "060200|060400",
+                "radius": 500,
+                "page_num": 1,
+                "page_size": 25,
+                "output": "JSON",
+                "region": "贵阳市",
+            },
+        )
+        self.assertTrue(cache_key.endswith(".json"))
+
+    def test_search_poi_around_requires_keywords_or_typecodes(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            client = AmapClient(api_key="test-key", cache_dir=tmp_dir)
+
+            with self.assertRaisesRegex(ValueError, "keywords.*types"):
+                client.search_poi_around("106.713478,26.578343")
+
     def test_request_with_cache_uses_existing_json_without_network(self):
         with tempfile.TemporaryDirectory() as tmp_dir:
             client = AmapClient(api_key="test-key", cache_dir=tmp_dir)

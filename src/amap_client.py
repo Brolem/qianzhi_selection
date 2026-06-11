@@ -53,13 +53,18 @@ class AmapClient:
     def search_poi_around(
         self,
         location: str,
-        keywords: str,
+        keywords: str | None = None,
         radius: int = 500,
         city: str | None = None,
         page: int = 1,
         offset: int = 20,
+        types: str | None = None,
     ) -> dict[str, Any] | None:
         """Search POI records around a location."""
+        keyword_value = keywords.strip() if keywords else None
+        type_value = types.strip() if types else None
+        if not keyword_value and not type_value:
+            raise ValueError("search_poi_around 要求 keywords 或 types 至少提供一个")
         if self.demo_mode:
             LOGGER.info("AMAP_KEY 未配置，search_poi_around 使用 demo 模式")
             return None
@@ -67,12 +72,15 @@ class AmapClient:
         params: dict[str, Any] = {
             "key": self.api_key,
             "location": location,
-            "keywords": keywords,
             "radius": radius,
             "page_num": page,
             "page_size": offset,
             "output": "JSON",
         }
+        if keyword_value:
+            params["keywords"] = keyword_value
+        if type_value:
+            params["types"] = type_value
         if city is not None:
             params["region"] = city
         cache_key = self._build_cache_key(POI_AROUND_URL, params)

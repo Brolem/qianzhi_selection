@@ -75,6 +75,23 @@ poi_categories:
   subway_station: "地铁站"
   parking: "停车场"
 
+poi_typecodes:
+  convenience_store: "060200"
+  supermarket: "060400"
+  restaurant: "050000"
+  fast_food: "050300"
+  snack: "050400|050800|050900"
+  cafe: "050500"
+  tea: "050700"
+  school: "141200"
+  hospital: "090100|090200"
+  mall: "060100"
+  office: "120201"
+  residential: "120300"
+  bus_stop: "150700"
+  subway_station: "150500"
+  parking: "150900"
+
 weights:
   convenience:
     traffic_accessibility: 0.1666666667

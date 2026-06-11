@@ -78,6 +78,30 @@ class ConfigHelperTests(unittest.TestCase):
             },
         )
 
+    def test_get_poi_typecodes_returns_exact_comparison_categories(self):
+        typecodes = config_module.get_poi_typecodes()
+
+        self.assertEqual(
+            typecodes,
+            {
+                "convenience_store": "060200",
+                "supermarket": "060400",
+                "restaurant": "050000",
+                "fast_food": "050300",
+                "snack": "050400|050800|050900",
+                "cafe": "050500",
+                "tea": "050700",
+                "school": "141200",
+                "hospital": "090100|090200",
+                "mall": "060100",
+                "office": "120201",
+                "residential": "120300",
+                "bus_stop": "150700",
+                "subway_station": "150500",
+                "parking": "150900",
+            },
+        )
+
     def test_ensure_dirs_creates_v2_data_paths_without_requiring_repo_writes(self):
         with tempfile.TemporaryDirectory() as tmp_dir:
             base = Path(tmp_dir)
