@@ -11,6 +11,10 @@
 3. 当不确定某个请求、配置、数据结构、变量名、JSON 路径、字段、路径或编码相关的具体表述时，必须优先读取相关文件，从测试脚本、抓包结果、日志、配置文件、源码、文档或实际输出中提取精确表述。
 4. 若无法从现有文件中找到精确信息，必须向用户询问，由用户手动执行测试、抓包或检查来获取。
 5. 除非用户明确特别允许，否则不得自行补全、推断或猜测任何内容。
+6. 根目录总控文档约束项目目标、方法边界和步骤顺序；真实文件、字段、配置、接口响应、测试结果和运行环境决定具体实现。
+7. 当总控文档中的示例路径、字段、命令或实现细节与真实仓库状态冲突时，不得机械执行，必须按实际情况调整。
+8. 每次调整必须记录冲突内容、实际依据、实现选择和验证结果。
+9. 未经实际验证的能力不得写成已完成，不得以形式上的命令通过替代真实数据验收。
 
 ## 功能变更维护规则
 
@@ -70,3 +74,10 @@
 - 改动文件：`D:\Users\Desktop\GZAICp\qianzhi_selection\src\poi_fetcher.py`；`D:\Users\Desktop\GZAICp\qianzhi_selection\tests\test_poi_fetcher.py`；`D:\Users\Desktop\GZAICp\qianzhi_selection\data\processed\grid_poi_raw.csv`；`D:\Users\Desktop\GZAICp\qianzhi_selection\data\processed\grid_poi_counts.csv`；`D:\Users\Desktop\GZAICp\qianzhi_selection\data\cache\amap\`；`D:\Users\Desktop\GZAICp\qianzhi_selection\outputs\results\poi_fetch_summary.md`；`D:\Users\Desktop\GZAICp\qianzhi_selection\AGENTS.md`。
 - 依据：用户明确指令“PLEASE IMPLEMENT THIS PLAN”中的 Step 6 网格 POI 采集与统计实施计划；已读取总控文档 Step 6、`config.yaml` 中 15 个真实 `poi_categories`、`src\amap_client.py`、`src\config.py`、Step 5 网格输出和现有测试；用户已确认默认每区 20 个网格、空间均匀分散抽样、每类最多 2 页且每页 25 条。
 - 验证：已先新增 `tests\test_poi_fetcher.py` 并运行 `python -m unittest tests.test_poi_fetcher -v`，RED 阶段因缺少 `src.poi_fetcher` 模块而失败；实现后 7 个测试通过。真实采集期间两次出现外部 SSL 握手超时，已读取缓存确认已完成请求均为 `status=1`、`info=OK`，随后新增仅对无响应最多尝试 3 次的失败测试并完成 GREEN，高德明确错误响应仍立即失败。最终真实采集生成 3299 条 POI 明细和 60 条网格统计，云岩区、南明区、观山湖区各 20 个唯一网格，15 类计数字段完整，全部明细为 `source=amap_api`，同网格同类别的非空 `poi_id` 无重复；摘要明确为原型样本，并把缓存命中和重试统一记录为客户端查询调用次数，不误报为真实联网次数。已复用缓存再次运行 Step 6 验收命令，60 个网格全部完成并刷新三个正式输出；已运行 `python -m unittest discover -s tests -v`，结果为 61 个测试通过；已运行递归 src AST 语法检查，输出 `syntax ok`；已基于 `config.yaml` 真实区县和类别配置完成输出验收，结果为 `raw=3299 counts=60 districts=3 categories=15`；Step 6 新增代码的项目规则扫描无异常命中。
+
+### 2026-06-11 17:00
+
+- 功能：执行 Step 7 网格级指标工程，基于 60 个真实采集网格的关键词 POI 统计生成评分输入；新增全局 `log1p + Min-Max` 归一化、四项公共指标、便利店与轻餐饮各自的共生和竞争指标、全零网格审计标记及原子输出能力；同时将“总控规定目标与边界，真实仓库状态决定具体实现”固定为项目总原则。
+- 改动文件：`D:\Users\Desktop\GZAICp\qianzhi_selection\src\feature_engineering.py`；`D:\Users\Desktop\GZAICp\qianzhi_selection\tests\test_feature_engineering.py`；`D:\Users\Desktop\GZAICp\qianzhi_selection\data\processed\grid_scoring_input.csv`；`D:\Users\Desktop\GZAICp\qianzhi_selection\outputs\results\feature_engineering_report.md`；`D:\Users\Desktop\GZAICp\qianzhi_selection\README.md`；`D:\Users\Desktop\GZAICp\qianzhi_selection\黔址优选_Codex多步执行指令.md`；`D:\Users\Desktop\GZAICp\qianzhi_selection\AGENTS.md`。
+- 依据：用户明确批准的 Step 7 网格级指标工程实施计划；已读取总控文档 Step 7、Step 8、`config.yaml`、`src\config.py`、Step 5 网格表、Step 6 POI 统计表和现有测试。总控示例中的宏观与就业文件路径不符合当前真实目录，实际文件位于 `data\processed\official\`，本步只在报告中说明其背景作用，不作为脚本依赖。总控只列一个共生指标和一个竞争指标，但同时定义了两种业态的不同组成字段；为保证后续便利店与轻餐饮评分具有真实差异，本步按用户确认拆分为四个业态专属字段。
+- 验证：已先新增 `tests\test_feature_engineering.py` 并运行 `python -m unittest tests.test_feature_engineering -v`，RED 阶段因缺少 `src.feature_engineering` 模块而失败；实现后新增第二个输出替换失败的回归测试，确认旧实现会留下部分更新，再增加双文件回滚逻辑，最终定向测试 9 项通过。已运行 `python src\feature_engineering.py`，生成 60 行 `grid_scoring_input.csv` 和指标工程报告，云岩区、南明区、观山湖区各 20 行，网格标识无重复且与 `grid_poi_counts.csv` 集合完全一致；19 个全零网格均保留并标记为无 POI 活动；8 项指标无空值且全部位于 0-100；评分输入未包含官方宏观或就业字段。已运行 `python -m unittest discover -s tests -v`，结果为 76 个测试通过；已运行递归 src AST 语法检查，输出 `syntax ok`。
