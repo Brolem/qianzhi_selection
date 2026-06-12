@@ -727,6 +727,7 @@ python src/feature_engineering.py
 输入：
 - data/processed/grid_scoring_input.csv
 - config.yaml 中便利店和轻餐饮权重
+- config.yaml 中 community_retail 和 food_service 指标模板
 
 输出：
 1. outputs/results/grid_stage_score_result.csv
@@ -745,24 +746,36 @@ python src/feature_engineering.py
    - competition_pressure
 评分时使用 competition_score = 100 - competition_pressure。
 
-3. 分别计算：
+3. 默认分别计算：
    - convenience_score
    - light_food_score
 
-4. 输出推荐：
+4. 支持用户自定义方案：
+   - 自定义 profile_id 和 profile_name
+   - 选择 community_retail 或 food_service 指标模板
+   - 设置六项非负权重，权重总和必须为 1
+   - 自定义结果独立写入 outputs/results/custom_profiles/<profile_id>/
+
+5. 输出推荐：
    - 全局便利店 Top 10
    - 全局轻餐饮 Top 10
    - 各区县便利店 Top 5
    - 各区县轻餐饮 Top 5
 
-5. 为每个网格生成：
-   - main_advantage
-   - main_risk
+6. 为每种方案分别生成：
+   - 竞争得分
+   - 综合得分
+   - 全局排名与区县排名
+   - 主要优势与主要风险
    - recommendation_level：推荐 / 谨慎推荐 / 暂不推荐
 
-6. district_summary_result.csv 包含：
+7. 只有 has_poi_activity=True 的网格参与排名。
+   无活动网格得分为 0，排名留空，固定标记为暂不推荐。
+
+8. district_summary_result.csv 包含：
    - district_name
    - grid_count
+   - active_grid_count
    - avg_convenience_score
    - avg_light_food_score
    - top_convenience_grid_id
@@ -779,6 +792,21 @@ python src/feature_engineering.py
 
 ```bash
 python src/scoring_model.py
+```
+
+自定义方案示例：
+
+```powershell
+python src/scoring_model.py `
+  --profile-id custom_retail_01 `
+  --profile-name "自定义社区业态" `
+  --template community_retail `
+  --traffic-weight 0.20 `
+  --consumption-weight 0.25 `
+  --employment-weight 0.10 `
+  --synergy-weight 0.20 `
+  --competition-weight 0.15 `
+  --atmosphere-weight 0.10
 ```
 
 ---

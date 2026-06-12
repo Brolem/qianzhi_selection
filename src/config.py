@@ -94,6 +94,23 @@ def get_weights(config_or_business_type: dict[str, Any] | str, business_type: st
     return dict(values)
 
 
+def get_scoring_templates(config: dict[str, Any] | None = None) -> dict[str, dict[str, str]]:
+    """Return configured Step 8 scoring template field mappings."""
+    cfg = config or load_config()
+    templates = cfg.get("scoring_templates")
+    if not isinstance(templates, dict):
+        raise KeyError("config.yaml 缺少 scoring_templates")
+
+    result: dict[str, dict[str, str]] = {}
+    for template_id, values in templates.items():
+        if not isinstance(values, dict):
+            raise ValueError(
+                f"config.yaml 中 scoring_templates.{template_id} 必须是映射"
+            )
+        result[str(template_id)] = dict(values)
+    return result
+
+
 def get_poi_categories(config: dict[str, Any] | None = None) -> dict[str, str]:
     """Return configured POI category keywords."""
     cfg = config or load_config()

@@ -53,6 +53,43 @@ class ConfigHelperTests(unittest.TestCase):
         self.assertEqual(set(light_food), expected_keys)
         self.assertAlmostEqual(sum(convenience.values()), 1.0, places=6)
         self.assertAlmostEqual(sum(light_food.values()), 1.0, places=6)
+        self.assertEqual(
+            convenience,
+            {
+                "traffic_accessibility": 0.20,
+                "consumption_potential": 0.25,
+                "employment_customer_proxy": 0.10,
+                "synergy_score": 0.20,
+                "competition_pressure": 0.15,
+                "business_atmosphere": 0.10,
+            },
+        )
+        self.assertEqual(
+            light_food,
+            {
+                "traffic_accessibility": 0.15,
+                "consumption_potential": 0.10,
+                "employment_customer_proxy": 0.25,
+                "synergy_score": 0.20,
+                "competition_pressure": 0.15,
+                "business_atmosphere": 0.15,
+            },
+        )
+
+    def test_get_scoring_templates_returns_exact_step8_mappings(self):
+        self.assertEqual(
+            config_module.get_scoring_templates(),
+            {
+                "community_retail": {
+                    "synergy_field": "convenience_synergy_score",
+                    "competition_field": "convenience_competition_pressure",
+                },
+                "food_service": {
+                    "synergy_field": "light_food_synergy_score",
+                    "competition_field": "light_food_competition_pressure",
+                },
+            },
+        )
 
     def test_get_poi_categories_returns_exact_step2_categories(self):
         categories = config_module.get_poi_categories()
