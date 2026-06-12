@@ -19,9 +19,19 @@ if str(PROJECT_ROOT) not in sys.path:
 try:
     from .config import get_path
     from .reporting.report_generator import generate_site_report
+    from .visualization.map_viz import (
+        MapProfileSpec,
+        available_profile_specs,
+        build_profile_map,
+    )
 except ImportError:
     from src.config import get_path
     from src.reporting.report_generator import generate_site_report
+    from src.visualization.map_viz import (
+        MapProfileSpec,
+        available_profile_specs,
+        build_profile_map,
+    )
 
 
 REGION_STAGE_RESULT = get_path("results_region_stage") / "region_stage_score_result.csv"
@@ -65,7 +75,7 @@ def load_table(path: str | Path) -> pd.DataFrame:
 
 
 def map_file_for_business(business_type: str) -> Path:
-    """Return the Step 6 map HTML path for a supported business type."""
+    """Return the Step 9 default map HTML path for a supported business type."""
     if business_type == "社区便利店":
         return CONVENIENCE_MAP
     if business_type == "轻餐饮":
@@ -267,14 +277,67 @@ def render_grid_stage(st: Any, business_type: str) -> None:
     )
 
 
-def render_map_page(st: Any, components: Any, business_type: str) -> None:
-    """Render Step 6 map HTML."""
+def render_map_page(
+    st: Any,
+    components: Any,
+    business_type: str,
+    *,
+    profile_specs: dict[str, MapProfileSpec] | None = None,
+    map_builder: Any = build_profile_map,
+    st_folium_func: Any = None,
+) -> None:
+    """Render default or custom Step 9 maps without changing other pages."""
     st.header("地图展示")
-    map_path = map_file_for_business(business_type)
-    if not map_path.exists():
-        _missing_output_message(st, map_path, "python -m src.visualization.map_viz")
+    try:
+        specs = profile_specs or available_profile_specs()
+    except (FileNotFoundError, KeyError, ValueError) as exc:
+        st.error(str(exc))
         return
-    components.html(map_path.read_text(encoding="utf-8"), height=640, scrolling=True)
+    if not specs:
+        st.warning("当前没有可用的评分方案。")
+        return
+
+    labels = list(specs)
+    preferred_label = (
+        "默认｜社区便利店"
+        if business_type == "社区便利店"
+        else "默认｜轻餐饮"
+    )
+    default_index = labels.index(preferred_label) if preferred_label in labels else 0
+    selected_label = st.selectbox("评分方案", labels, index=default_index)
+    spec = specs[selected_label]
+
+    if st_folium_func is not None:
+        try:
+            result_map = map_builder(spec)
+        except (FileNotFoundError, KeyError, ValueError) as exc:
+            st.error(str(exc))
+            return
+        st_folium_func(
+            result_map,
+            key=f"site_map_{spec.profile_id}",
+            height=680,
+            use_container_width=True,
+        )
+        return
+
+    if spec.static_html_path is None:
+        st.error(
+            "自定义评分方案地图需要安装 streamlit-folium 后动态显示。"
+        )
+        return
+    if not spec.static_html_path.exists():
+        _missing_output_message(
+            st,
+            spec.static_html_path,
+            "python -m src.visualization.map_viz",
+        )
+        return
+    components.html(
+        spec.static_html_path.read_text(encoding="utf-8"),
+        height=680,
+        scrolling=True,
+    )
 
 
 def render_report_page(st: Any, business_type: str) -> None:
@@ -341,6 +404,10 @@ def main() -> None:
         import streamlit.components.v1 as components
     except ImportError as exc:
         raise SystemExit("Please install streamlit before running the app.") from exc
+    try:
+        from streamlit_folium import st_folium
+    except ImportError:
+        st_folium = None
 
     st.set_page_config(page_title="黔址优选", layout="wide")
     page = st.sidebar.radio("页面", PAGE_NAMES)
@@ -357,7 +424,12 @@ def main() -> None:
     elif page == "网格细筛":
         render_grid_stage(st, business_type)
     elif page == "地图展示":
-        render_map_page(st, components, business_type)
+        render_map_page(
+            st,
+            components,
+            business_type,
+            st_folium_func=st_folium,
+        )
     elif page == "智能报告":
         render_report_page(st, business_type)
     elif page == "项目说明":

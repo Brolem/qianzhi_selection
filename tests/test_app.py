@@ -6,7 +6,74 @@ from pathlib import Path
 
 import pandas as pd
 
-from src.app import business_columns, load_table, map_file_for_business, top_rows
+from src.app import (
+    business_columns,
+    load_table,
+    map_file_for_business,
+    render_map_page,
+    top_rows,
+)
+from src.visualization.map_viz import MapProfileSpec
+
+
+class FakeStreamlit:
+    def __init__(self, selected_label):
+        self.selected_label = selected_label
+        self.headers = []
+        self.errors = []
+        self.warnings = []
+
+    def header(self, text):
+        self.headers.append(text)
+
+    def selectbox(self, label, options, index=0):
+        self.selectbox_label = label
+        self.selectbox_options = list(options)
+        self.selectbox_index = index
+        return self.selected_label
+
+    def error(self, text):
+        self.errors.append(text)
+
+    def warning(self, text):
+        self.warnings.append(text)
+
+
+class FakeComponents:
+    def __init__(self):
+        self.calls = []
+
+    def html(self, content, height, scrolling):
+        self.calls.append(
+            {
+                "content": content,
+                "height": height,
+                "scrolling": scrolling,
+            }
+        )
+
+
+def make_map_spec(
+    profile_id: str,
+    profile_name: str,
+    result_path: Path,
+    static_html_path: Path | None,
+) -> MapProfileSpec:
+    return MapProfileSpec(
+        profile_id=profile_id,
+        profile_name=profile_name,
+        template_id="community_retail",
+        result_path=result_path,
+        static_html_path=static_html_path,
+        score_field="profile_score",
+        rank_field="profile_rank",
+        district_rank_field="district_profile_rank",
+        competition_score_field="profile_competition_score",
+        advantage_field="profile_main_advantage",
+        risk_field="profile_main_risk",
+        level_field="profile_recommendation_level",
+        synergy_field="convenience_synergy_score",
+    )
 
 
 class AppHelperTests(unittest.TestCase):
@@ -31,7 +98,7 @@ class AppHelperTests(unittest.TestCase):
 
         self.assertEqual(result["grid_id"].tolist(), ["grid_1", "grid_2"])
 
-    def test_map_file_for_business_returns_step6_html_paths(self):
+    def test_map_file_for_business_returns_step9_html_paths(self):
         self.assertEqual(map_file_for_business("社区便利店").name, "convenience_grid_map.html")
         self.assertEqual(map_file_for_business("轻餐饮").name, "light_food_grid_map.html")
 
@@ -45,6 +112,103 @@ class AppHelperTests(unittest.TestCase):
             self.assertEqual(loaded["region_id"].astype(str).tolist(), ["8316193"])
             with self.assertRaises(FileNotFoundError):
                 load_table(Path(tmp_dir) / "missing.csv")
+
+    def test_render_map_page_uses_dynamic_profile_selector_and_st_folium(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            base = Path(tmp_dir)
+            specs = {
+                "默认｜社区便利店": make_map_spec(
+                    "convenience",
+                    "社区便利店",
+                    base / "default.csv",
+                    base / "default.html",
+                ),
+                "自定义｜自定义社区业态 (custom_01)": make_map_spec(
+                    "custom_01",
+                    "自定义社区业态",
+                    base / "custom.csv",
+                    None,
+                ),
+            }
+            selected = "自定义｜自定义社区业态 (custom_01)"
+            st = FakeStreamlit(selected)
+            components = FakeComponents()
+            rendered = []
+            map_object = object()
+
+            render_map_page(
+                st,
+                components,
+                "社区便利店",
+                profile_specs=specs,
+                map_builder=lambda spec: map_object,
+                st_folium_func=lambda fig, **kwargs: rendered.append((fig, kwargs)),
+            )
+
+            self.assertEqual(st.selectbox_label, "评分方案")
+            self.assertEqual(st.selectbox_options, list(specs))
+            self.assertEqual(rendered[0][0], map_object)
+            self.assertEqual(rendered[0][1]["height"], 680)
+            self.assertTrue(rendered[0][1]["use_container_width"])
+            self.assertEqual(rendered[0][1]["key"], "site_map_custom_01")
+            self.assertEqual(components.calls, [])
+
+    def test_render_map_page_falls_back_to_default_static_html(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            base = Path(tmp_dir)
+            html_path = base / "default.html"
+            html_path.write_text("<p>default map</p>", encoding="utf-8")
+            label = "默认｜社区便利店"
+            specs = {
+                label: make_map_spec(
+                    "convenience",
+                    "社区便利店",
+                    base / "default.csv",
+                    html_path,
+                )
+            }
+            st = FakeStreamlit(label)
+            components = FakeComponents()
+
+            render_map_page(
+                st,
+                components,
+                "社区便利店",
+                profile_specs=specs,
+                st_folium_func=None,
+            )
+
+            self.assertEqual(len(components.calls), 1)
+            self.assertIn("default map", components.calls[0]["content"])
+            self.assertEqual(components.calls[0]["height"], 680)
+
+    def test_render_map_page_does_not_fallback_custom_profile_to_default_html(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            base = Path(tmp_dir)
+            label = "自定义｜自定义社区业态 (custom_01)"
+            specs = {
+                label: make_map_spec(
+                    "custom_01",
+                    "自定义社区业态",
+                    base / "custom.csv",
+                    None,
+                )
+            }
+            st = FakeStreamlit(label)
+            components = FakeComponents()
+
+            render_map_page(
+                st,
+                components,
+                "社区便利店",
+                profile_specs=specs,
+                st_folium_func=None,
+            )
+
+            self.assertEqual(components.calls, [])
+            self.assertTrue(
+                any("streamlit-folium" in message for message in st.errors)
+            )
 
     def test_app_script_imports_when_streamlit_runs_file_path(self):
         project_root = Path(__file__).resolve().parents[1]

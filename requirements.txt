@@ -1,5 +1,6 @@
 pandas
 streamlit
+streamlit-folium
 geopandas
 fiona
 pyyaml

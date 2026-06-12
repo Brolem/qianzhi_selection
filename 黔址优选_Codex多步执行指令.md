@@ -822,7 +822,8 @@ python src/scoring_model.py `
 ```text
 任务 9：地图生成模块。
 
-新增 src/map_viz.py。
+原地升级 src/visualization/map_viz.py，保留当前模块布局和
+python -m src.visualization.map_viz 入口，不新增重复的 src/map_viz.py。
 
 输入：
 - outputs/results/grid_stage_score_result.csv
@@ -842,8 +843,17 @@ python src/scoring_model.py `
    - 轻餐饮评分热力；
    - Top N 推荐网格高亮；
    - tooltip 显示 grid_id、district_name、score、main_advantage、main_risk。
-4. 如果安装 streamlit-folium，则 app.py 中直接嵌入；
-   如果没有，则用 components.html 嵌入静态 html。
+4. 790 个空间网格作为完整背景：
+   - 未采集网格显示浅灰；
+   - 无 POI 活动网格显示中性灰；
+   - 活跃网格按固定 0-100 色阶着色；
+   - 全局 Top 10 使用编号标记和加粗边界。
+5. 高德原始数据保持 GCJ-02，地图渲染时转换为 WGS84，
+   不改写 Step 4 到 Step 8 的正式数据。
+6. app.py 地图页使用 streamlit-folium 动态展示默认或自定义评分方案；
+   组件不可用时，默认方案用 components.html 嵌入静态 HTML。
+7. 自定义方案读取 outputs/results/custom_profiles/<profile_id>/
+   grid_score_result.csv 中稳定的 profile_* 字段，不预生成自定义 HTML。
 
 禁止：
 - 不要依赖必须联网才能打开的商业地图 key；
@@ -854,7 +864,7 @@ python src/scoring_model.py `
 ### 验收命令
 
 ```bash
-python src/map_viz.py
+python -m src.visualization.map_viz
 ```
 
 ---
