@@ -5,14 +5,20 @@ from __future__ import annotations
 from typing import Any
 
 from src.pages.common import get_streamlit
+from src.ui.workbench import render_page_header
 
 
 def render(st_module: Any | None = None) -> None:
     """Render current v2 scope and limitations."""
     st = get_streamlit(st_module)
-    st.header("项目说明")
-    st.markdown(
-        """
+    render_page_header(
+        st,
+        "项目说明",
+        "说明当前已实施能力、数据边界和结果适用范围。",
+    )
+    with st.container(border=True):
+        st.markdown(
+            """
         **当前已实施**
 
         - 高德区县边界、统一 1km 空间网格和 60 个网格的 POI 样本采集。
@@ -31,4 +37,4 @@ def render(st_module: Any | None = None) -> None:
         - 不提供真实租金、客流、营收或盈利预测。
         - 不输出门牌号级推荐，实地决策仍需现场复核。
         """
-    )
+        )

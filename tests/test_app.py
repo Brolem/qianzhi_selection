@@ -15,6 +15,7 @@ from src.app import (
     map_file_for_business,
     render_map_page,
     render_report_page,
+    run_workbench,
     run_navigation,
     top_rows,
 )
@@ -34,11 +35,15 @@ class FakeStreamlit:
         self.markdowns = []
         self.downloads = []
         self.selectboxes = {}
+        self.column_calls = []
+        self.subheaders = []
+        self.captions = []
 
     def header(self, text):
         self.headers.append(text)
 
-    def selectbox(self, label, options, index=0):
+    def selectbox(self, label, options, index=0, key=None):
+        del key
         options = list(options)
         self.selectboxes[label] = options
         self.selectbox_label = label
@@ -62,6 +67,21 @@ class FakeStreamlit:
     def markdown(self, text):
         self.markdowns.append(text)
 
+    def subheader(self, text):
+        self.subheaders.append(text)
+
+    def caption(self, text):
+        self.captions.append(text)
+
+    def columns(self, spec, gap=None):
+        self.column_calls.append((spec, gap))
+        count = spec if isinstance(spec, int) else len(spec)
+        return [FakeContext() for _ in range(count)]
+
+    def container(self, border=False):
+        del border
+        return FakeContext()
+
     def button(self, label):
         return label in self.clicked_buttons
 
@@ -81,6 +101,14 @@ class FakeComponents:
                 "scrolling": scrolling,
             }
         )
+
+
+class FakeContext:
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        return False
 
 
 class FakeNavigationPage:
@@ -116,9 +144,17 @@ class FakeNavigationStreamlit:
         self.navigation_calls = []
         self.controller = FakeNavigationController()
         self.sidebar = FakeSidebar(selected_fallback)
+        self.page_config_calls = []
+        self.html_calls = []
         if supports_navigation:
             self.Page = self._page
             self.navigation = self._navigation
+
+    def set_page_config(self, **kwargs):
+        self.page_config_calls.append(kwargs)
+
+    def html(self, body):
+        self.html_calls.append(body)
 
     def _page(self, renderer, *, title, url_path, default=False):
         page = FakeNavigationPage(
@@ -311,6 +347,20 @@ class AppHelperTests(unittest.TestCase):
         )
         self.assertEqual(calls, ["页面乙"])
 
+    def test_run_workbench_applies_theme_and_brand_before_navigation(self):
+        st = FakeNavigationStreamlit()
+
+        run_workbench(st)
+
+        self.assertEqual(
+            st.page_config_calls,
+            [{"page_title": "黔址优选", "layout": "wide"}],
+        )
+        self.assertEqual(len(st.html_calls), 2)
+        self.assertIn("<style>", st.html_calls[0])
+        self.assertIn("黔址优选 | 社区商业智能选址决策系统", st.html_calls[1])
+        self.assertEqual(st.controller.run_count, 1)
+
     def test_business_columns_returns_exact_fields_for_supported_business_types(self):
         self.assertEqual(business_columns("社区便利店"), ("convenience_score", "rank_convenience"))
         self.assertEqual(business_columns("轻餐饮"), ("light_catering_score", "rank_light_catering"))
@@ -386,6 +436,35 @@ class AppHelperTests(unittest.TestCase):
             self.assertTrue(rendered[0][1]["use_container_width"])
             self.assertEqual(rendered[0][1]["key"], "site_map_custom_01")
             self.assertEqual(components.calls, [])
+
+    def test_render_map_page_uses_workbench_control_and_map_columns(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            base = Path(tmp_dir)
+            label = "默认｜社区便利店"
+            specs = {
+                label: make_map_spec(
+                    "convenience",
+                    "社区便利店",
+                    base / "default.csv",
+                    base / "default.html",
+                )
+            }
+            st = FakeStreamlit(label)
+            rendered = []
+
+            render_map_page(
+                st,
+                FakeComponents(),
+                profile_specs=specs,
+                map_builder=lambda spec: object(),
+                st_folium_func=lambda fig, **kwargs: rendered.append((fig, kwargs)),
+                use_workbench_layout=True,
+                show_header=False,
+            )
+
+            self.assertEqual(st.column_calls, [([1, 4], "large")])
+            self.assertIn("地图参数", st.subheaders)
+            self.assertEqual(len(rendered), 1)
 
     def test_render_map_page_falls_back_to_default_static_html(self):
         with tempfile.TemporaryDirectory() as tmp_dir:
@@ -500,6 +579,29 @@ class AppHelperTests(unittest.TestCase):
             )
             generator.assert_called_once()
             self.assertEqual(refreshed.markdowns, ["# 智能报告"])
+
+    def test_render_report_page_uses_workbench_columns_and_idle_state(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            base = Path(tmp_dir)
+            spec = make_report_spec(write_report_result(base / "result.csv"))
+            generator = Mock()
+            st = FakeStreamlit(
+                selected_label={"评分方案": "默认｜社区便利店"},
+            )
+
+            render_report_page(
+                st,
+                profile_specs={"默认｜社区便利店": spec},
+                report_generator_func=generator,
+                use_workbench_layout=True,
+                show_header=False,
+            )
+
+            generator.assert_not_called()
+            self.assertEqual(st.column_calls, [([1, 2.4], "large")])
+            self.assertTrue(
+                any("生成智能报告" in message for message in st.infos)
+            )
 
     def test_render_report_page_offers_template_after_deepseek_failure(self):
         with tempfile.TemporaryDirectory() as tmp_dir:

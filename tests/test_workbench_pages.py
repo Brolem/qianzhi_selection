@@ -75,6 +75,10 @@ class WorkbenchPageTests(unittest.TestCase):
                 poi_counts_path=poi_counts,
                 scores_path=scores,
                 profile_specs={"默认": object(), "自定义": object()},
+                poi_categories={
+                    "convenience_store": "便利店",
+                    "restaurant": "餐饮",
+                },
             )
 
             self.assertEqual(
@@ -83,6 +87,7 @@ class WorkbenchPageTests(unittest.TestCase):
                     "district_count": 2,
                     "spatial_grid_count": 3,
                     "poi_sample_grid_count": 2,
+                    "poi_category_count": 2,
                     "active_grid_count": 1,
                     "profile_count": 2,
                 },

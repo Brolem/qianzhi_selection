@@ -17,6 +17,7 @@ from src.pages.common import (
     get_streamlit,
     load_required_csv,
 )
+from src.ui.workbench import render_page_header
 
 
 def _foundation_row(
@@ -112,7 +113,11 @@ def build_data_foundation_rows(
 def render(st_module: Any | None = None) -> None:
     """Render the current data-foundation inventory."""
     st = get_streamlit(st_module)
-    st.header("数据底座")
+    render_page_header(
+        st,
+        "数据底座",
+        "核对当前真实文件、记录规模、地域范围、数据角色和坐标口径。",
+    )
     try:
         rows = build_data_foundation_rows(
             grids_path=SPATIAL_GRIDS_PATH,
@@ -121,7 +126,13 @@ def render(st_module: Any | None = None) -> None:
     except (FileNotFoundError, KeyError) as exc:
         st.error(str(exc))
         return
-    st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True)
+    with st.container(border=True):
+        st.subheader("当前数据资产")
+        st.dataframe(
+            pd.DataFrame(rows),
+            use_container_width=True,
+            hide_index=True,
+        )
     st.info(
         "官方数据当前只提供贵州省级背景；网格空间差异来自高德区县边界、"
         "POI 样本和统一指标工程。"

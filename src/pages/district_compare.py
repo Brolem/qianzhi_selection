@@ -10,6 +10,7 @@ from src.pages.common import (
     get_streamlit,
     load_required_csv,
 )
+from src.ui.workbench import render_page_header
 
 
 DISTRICT_SUMMARY_FIELDS = [
@@ -36,13 +37,19 @@ def load_district_comparison(
 def render(st_module: Any | None = None) -> None:
     """Render district grouping context without replacing grid ranking."""
     st = get_streamlit(st_module)
-    st.header("区域对比")
+    render_page_header(
+        st,
+        "区域对比",
+        "对比三区网格规模、活跃样本、POI 总量和两类默认方案表现。",
+    )
     try:
         frame = load_district_comparison()
     except (FileNotFoundError, KeyError) as exc:
         st.error(str(exc))
         return
-    st.dataframe(frame, use_container_width=True, hide_index=True)
+    with st.container(border=True):
+        st.subheader("三区汇总")
+        st.dataframe(frame, use_container_width=True, hide_index=True)
     st.info(
         "区县对比仅用于背景画像和结果分组，最终推荐仍以 1km 评价网格评分为准。"
     )

@@ -11,6 +11,7 @@ from src.pages.common import (
     profile_top_rows,
     select_profile,
 )
+from src.ui.workbench import render_page_header
 
 
 def recommendation_columns(profile) -> list[str]:
@@ -35,19 +36,32 @@ def recommendation_columns(profile) -> list[str]:
 def render(st_module: Any | None = None) -> None:
     """Render active Top 10 grid recommendations for one scoring profile."""
     st = get_streamlit(st_module)
-    st.header("网格推荐")
+    render_page_header(
+        st,
+        "网格推荐",
+        "按评分方案和区县查看活跃网格 Top 10、六维指标及风险解释。",
+    )
     try:
-        profile = select_profile(st, key="grid_recommendation_profile")
-        district = st.selectbox(
-            "区县",
-            ["全部", *available_districts(profile)],
-            key="grid_recommendation_district",
-        )
+        with st.container(border=True):
+            st.subheader("筛选条件")
+            profile_column, district_column = st.columns(2, gap="medium")
+            with profile_column:
+                profile = select_profile(
+                    st,
+                    key="grid_recommendation_profile",
+                )
+            with district_column:
+                district = st.selectbox(
+                    "区县",
+                    ["全部", *available_districts(profile)],
+                    key="grid_recommendation_district",
+                )
         rows = profile_top_rows(
             profile,
             district_name=district,
             limit=10,
         )
+        st.subheader("Top 10 推荐结果")
         st.dataframe(
             display_columns(rows, recommendation_columns(profile)),
             use_container_width=True,

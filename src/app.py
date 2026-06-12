@@ -30,6 +30,10 @@ from src.pages import (  # noqa: E402
 )
 from src.pages.map_insight import render_map_page  # noqa: E402
 from src.pages.report_center import render_report_page  # noqa: E402
+from src.ui.workbench import (  # noqa: E402
+    apply_workbench_theme,
+    render_brand_bar,
+)
 
 
 @dataclass(frozen=True)
@@ -96,10 +100,17 @@ def main() -> None:
         import streamlit as st
     except ImportError as exc:
         raise SystemExit("Please install streamlit before running the app.") from exc
+    run_workbench(st)
+
+
+def run_workbench(st: Any) -> None:
+    """Apply the shared shell before running page navigation."""
     st.set_page_config(
         page_title="黔址优选",
         layout="wide",
     )
+    apply_workbench_theme(st)
+    render_brand_bar(st)
     run_navigation(st)
 
 

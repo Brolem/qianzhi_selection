@@ -1,0 +1,10 @@
+[theme]
+primaryColor = "#2563EB"
+backgroundColor = "#F3F5F8"
+secondaryBackgroundColor = "#FFFFFF"
+textColor = "#172033"
+font = "sans-serif"
+baseRadius = "small"
+buttonRadius = "small"
+borderColor = "#DDE3EA"
+dataframeBorderColor = "#DDE3EA"
