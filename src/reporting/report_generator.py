@@ -1,315 +1,612 @@
-"""Report generation module for intelligent site selection reports."""
+"""Generate v2 intelligent site-selection reports with DeepSeek or templates."""
 
 from __future__ import annotations
 
 import argparse
 import json
 import os
+import tempfile
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Mapping
 
 import pandas as pd
 
-try:
-    from ..config import ensure_output_dirs, get_path
-except ImportError:
-    from src.config import ensure_output_dirs, get_path
+from src.config import get_path, load_config
+from src.profile_catalog import (
+    ResultProfileSpec,
+    profile_specs_by_id,
+)
 
 
-GRID_STAGE_RESULT = get_path("results_grid_stage") / "grid_stage_score_result.csv"
-REPORTS_DIR = get_path("reports")
-DEFAULT_QIANWEN_BASE_URL = "https://dashscope.aliyuncs.com/compatible-mode/v1"
-DEFAULT_QIANWEN_MODEL = "qwen3.7-plus"
+REPORTS_DIR = get_path("reports_dir")
+PROCESSED_DIR = get_path("processed_dir")
+MACRO_PATH = PROCESSED_DIR / "official" / "macro_clean.csv"
+EMPLOYMENT_PATH = PROCESSED_DIR / "official" / "employment_clean.csv"
+REPORT_HEADINGS = [
+    "## 一、评价网格基本信息",
+    "## 二、适配业态与推荐等级",
+    "## 三、交通可达性分析",
+    "## 四、消费潜力分析",
+    "## 五、就业/办公客群代理分析",
+    "## 六、共生业态分析",
+    "## 七、竞争压力分析",
+    "## 八、商业氛围与权重方案",
+    "## 九、主要优势与风险",
+    "## 十、经营建议",
+    "## 十一、数据来源与限制说明",
+]
+WEIGHT_LABELS = {
+    "traffic_accessibility": "交通可达性",
+    "consumption_potential": "消费潜力",
+    "employment_customer_proxy": "就业/办公客群代理",
+    "synergy_score": "共生业态",
+    "competition_pressure": "低竞争得分",
+    "business_atmosphere": "商业氛围",
+}
 
 
-class MissingQianwenConfigError(RuntimeError):
-    """Raised when Qianwen report generation lacks required configuration."""
+class MissingDeepSeekConfigError(RuntimeError):
+    """Raised when required DeepSeek configuration is unavailable."""
 
 
-def _format_score(value: Any) -> str:
-    """Format numeric values consistently in reports."""
-    numeric = pd.to_numeric(pd.Series([value]), errors="coerce").iloc[0]
-    if pd.isna(numeric):
-        return str(value)
-    return f"{float(numeric):.3f}"
+class InvalidReportContentError(RuntimeError):
+    """Raised when model output is empty or misses required sections."""
 
 
-def _score_field_for_business(business_type: str) -> str:
-    """Return the exact score field for a supported business type."""
-    if business_type == "社区便利店":
-        return "convenience_score"
-    if business_type == "轻餐饮":
-        return "light_catering_score"
-    raise ValueError(f"不支持的业态：{business_type}")
+@dataclass(frozen=True)
+class ReportGenerationResult:
+    """One generated report plus its non-business execution metadata."""
+
+    content: str
+    mode: str
+    model: str | None
+    used_fallback: bool
 
 
-def _record_value(record: Mapping[str, Any], key: str, default: str = "当前未接入，后续可补充") -> Any:
-    """Read a value from the scoring record with a visible missing-data notice."""
-    value = record.get(key, default)
-    if pd.isna(value):
-        return default
-    return value
+def _llm_config(config: dict[str, Any] | None = None) -> dict[str, Any]:
+    cfg = config or load_config()
+    values = cfg.get("llm")
+    if not isinstance(values, dict):
+        raise KeyError("config.yaml 缺少 llm")
+    if values.get("provider") != "deepseek":
+        raise ValueError("config.yaml 中 llm.provider 必须为 deepseek")
+    return values
 
 
-def _grid_identifier(record: Mapping[str, Any]) -> str:
-    """Return the exact grid identifier used in scoring outputs."""
-    return str(record.get("grid_id", record.get("region_id", "评价网格")))
+def create_deepseek_client(
+    *,
+    api_key: str | None = None,
+    base_url: str | None = None,
+    timeout_seconds: float | None = None,
+    max_retries: int | None = None,
+    config: dict[str, Any] | None = None,
+) -> Any:
+    """Create the OpenAI-compatible DeepSeek client."""
+    values = _llm_config(config)
+    resolved_key = api_key or os.getenv("DEEPSEEK_API_KEY")
+    if not resolved_key:
+        raise MissingDeepSeekConfigError(
+            "缺少 DEEPSEEK_API_KEY，无法调用 DeepSeek 生成报告。"
+        )
+    resolved_base_url = (
+        base_url
+        or os.getenv("DEEPSEEK_BASE_URL")
+        or str(values["base_url"])
+    )
+    resolved_timeout = float(
+        timeout_seconds
+        if timeout_seconds is not None
+        else os.getenv("DEEPSEEK_TIMEOUT_SECONDS", values["timeout_seconds"])
+    )
+    resolved_retries = int(
+        max_retries
+        if max_retries is not None
+        else os.getenv(
+            "DEEPSEEK_PRIMARY_MAX_RETRIES",
+            values["primary_max_retries"],
+        )
+    )
+    from openai import OpenAI
+
+    return OpenAI(
+        api_key=resolved_key,
+        base_url=resolved_base_url,
+        timeout=resolved_timeout,
+        max_retries=resolved_retries,
+    )
 
 
-def _report_payload(record: Mapping[str, Any], business_type: str) -> dict[str, Any]:
-    """Build the structured payload sent to the report generator."""
-    score_field = _score_field_for_business(business_type)
-    keys = [
-        "region_id",
+def load_official_data_context(
+    macro_path: str | Path = MACRO_PATH,
+    employment_path: str | Path = EMPLOYMENT_PATH,
+) -> dict[str, str]:
+    """Validate and describe the current official-data geographic scope."""
+    macro_file = Path(macro_path)
+    employment_file = Path(employment_path)
+    for path in [macro_file, employment_file]:
+        if not path.exists():
+            raise FileNotFoundError(f"官方背景数据不存在：{path}")
+    macro = pd.read_csv(macro_file, dtype={"area_code": str})
+    employment = pd.read_csv(employment_file, dtype={"region_id": str})
+    if "area_code" not in macro.columns:
+        raise KeyError(f"{macro_file} 缺少字段：area_code")
+    for field in ["region_id", "region_name"]:
+        if field not in employment.columns:
+            raise KeyError(f"{employment_file} 缺少字段：{field}")
+    macro_codes = sorted(macro["area_code"].dropna().astype(str).unique())
+    employment_codes = sorted(
+        employment["region_id"].dropna().astype(str).unique()
+    )
+    if macro_codes != ["520000"] or employment_codes != ["520000"]:
+        raise ValueError(
+            "官方宏观与就业数据当前必须保持贵州省级范围 520000"
+        )
+    return {
+        "scope": "贵州省级",
+        "macro_source": str(macro_file),
+        "employment_source": str(employment_file),
+        "usage": "只作贵州省整体市场背景与数据适用边界说明，不参与网格评分，也不用于制造区县差异。",
+    }
+
+
+def _required_fields(profile: ResultProfileSpec) -> list[str]:
+    return [
         "grid_id",
-        "grid_region_name",
-        "parent_region_id",
+        "district_name",
         "centroid_lon",
         "centroid_lat",
         "area_km2",
+        "poi_total_count",
+        "poi_category_coverage",
+        "has_poi_activity",
         "traffic_accessibility",
         "consumption_potential",
-        "synergy_score",
-        "competition_pressure",
-        "development_basis",
-        "convenience_score",
-        "light_catering_score",
-        "main_advantage",
-        "main_risk",
+        "employment_customer_proxy",
+        "business_atmosphere",
+        profile.synergy_field,
+        profile.competition_pressure_field,
+        profile.competition_score_field,
+        profile.score_field,
+        profile.rank_field,
+        profile.district_rank_field,
+        profile.advantage_field,
+        profile.risk_field,
+        profile.level_field,
     ]
-    payload = {key: _record_value(record, key) for key in keys if key in record}
-    payload["business_type"] = business_type
-    payload["score_field"] = score_field
-    payload["business_score"] = _record_value(record, score_field)
-    payload["missing_data_notice"] = "真实租金、真实客流、真实营收、停车条件、工商信用当前未接入，后续可补充。"
-    return payload
 
 
-def build_report_prompt(region_record: Mapping[str, Any], business_type: str) -> str:
-    """Build a strict Qianwen prompt from structured scoring fields."""
-    payload = _report_payload(region_record, business_type)
-    return f"""
-请根据下方结构化选址评分结果，生成一份 Markdown 格式的社区商业智能选址报告。
+def load_profile_results(profile: ResultProfileSpec) -> pd.DataFrame:
+    """Load and validate one Step 8 profile result."""
+    if not profile.result_path.exists():
+        raise FileNotFoundError(f"评分结果不存在：{profile.result_path}")
+    frame = pd.read_csv(profile.result_path, dtype={"adcode": str})
+    missing = [field for field in _required_fields(profile) if field not in frame]
+    if missing:
+        raise KeyError(
+            f"{profile.result_path} 缺少字段：{', '.join(missing)}"
+        )
+    if frame["grid_id"].duplicated().any():
+        raise ValueError(f"{profile.result_path} 存在重复 grid_id")
+    return frame
+
+
+def active_profile_results(profile: ResultProfileSpec) -> pd.DataFrame:
+    """Return active, ranked grids ordered by profile rank."""
+    frame = load_profile_results(profile)
+    activity = frame["has_poi_activity"]
+    if activity.dtype != bool:
+        if not activity.isin([True, False]).all():
+            raise ValueError(
+                f"{profile.result_path} 中 has_poi_activity 必须为布尔值"
+            )
+        activity = activity.astype(bool)
+    ranks = pd.to_numeric(frame[profile.rank_field], errors="coerce")
+    active = frame[activity & ranks.notna()].copy()
+    active[profile.rank_field] = ranks[activity & ranks.notna()]
+    return active.sort_values(
+        [profile.rank_field, "grid_id"],
+        kind="mergesort",
+    ).reset_index(drop=True)
+
+
+def _find_active_record(
+    profile: ResultProfileSpec,
+    grid_id: str,
+) -> dict[str, Any]:
+    frame = load_profile_results(profile)
+    matched = frame[frame["grid_id"].astype(str).eq(str(grid_id))]
+    if matched.empty:
+        raise KeyError(f"未找到评价网格：{grid_id}")
+    record = matched.iloc[0]
+    active = record["has_poi_activity"]
+    if isinstance(active, str):
+        active = active.strip().lower() == "true"
+    if not bool(active) or pd.isna(record[profile.rank_field]):
+        raise ValueError(f"评价网格 {grid_id} 无 POI 活动，不能生成智能报告")
+    return record.to_dict()
+
+
+def _value(record: Mapping[str, Any], field: str) -> Any:
+    value = record[field]
+    if pd.isna(value):
+        raise ValueError(f"评分记录字段 {field} 不能为空")
+    if hasattr(value, "item"):
+        return value.item()
+    return value
+
+
+def build_report_payload(
+    record: Mapping[str, Any],
+    profile: ResultProfileSpec,
+    official_context: Mapping[str, str],
+) -> dict[str, Any]:
+    """Build the exact structured payload used by template and LLM reports."""
+    return {
+        "profile": {
+            "profile_id": profile.profile_id,
+            "profile_name": profile.profile_name,
+            "template_id": profile.template_id,
+            "weights": profile.weights,
+        },
+        "grid": {
+            field: _value(record, field)
+            for field in [
+                "grid_id",
+                "district_name",
+                "centroid_lon",
+                "centroid_lat",
+                "area_km2",
+                "poi_total_count",
+                "poi_category_coverage",
+            ]
+        },
+        "metrics": {
+            "traffic_accessibility": _value(
+                record,
+                "traffic_accessibility",
+            ),
+            "consumption_potential": _value(
+                record,
+                "consumption_potential",
+            ),
+            "employment_customer_proxy": _value(
+                record,
+                "employment_customer_proxy",
+            ),
+            "synergy_score": _value(record, profile.synergy_field),
+            "competition_pressure": _value(
+                record,
+                profile.competition_pressure_field,
+            ),
+            "competition_score": _value(
+                record,
+                profile.competition_score_field,
+            ),
+            "business_atmosphere": _value(record, "business_atmosphere"),
+        },
+        "recommendation": {
+            "score": _value(record, profile.score_field),
+            "global_rank": _value(record, profile.rank_field),
+            "district_rank": _value(record, profile.district_rank_field),
+            "level": _value(record, profile.level_field),
+            "main_advantage": _value(record, profile.advantage_field),
+            "main_risk": _value(record, profile.risk_field),
+        },
+        "official_data": dict(official_context),
+        "method_boundaries": [
+            "employment_customer_proxy 是由写字楼、商场、学校、餐饮等 POI 构成的就业/办公客群代理，不是真实就业人口密度。",
+            "结果只支持当前关键词 POI 样本统一口径下的相对评价，不代表完整设施总量。",
+            "结果不是租金、客流、营收或盈利预测，也不是门牌号级推荐。",
+        ],
+    }
+
+
+def build_report_prompt(
+    record: Mapping[str, Any],
+    profile: ResultProfileSpec,
+    official_context: Mapping[str, str],
+) -> str:
+    """Build the strict DeepSeek report prompt."""
+    payload = build_report_payload(record, profile, official_context)
+    headings = "\n".join(REPORT_HEADINGS)
+    return f"""请仅根据结构化输入生成 Markdown 格式的商业智能选址报告。
 
 结构化输入：
 {json.dumps(payload, ensure_ascii=False, indent=2, default=str)}
 
-必须按以下十个二级标题输出，标题文字必须完全保留：
-## 一、候选网格基本信息
-## 二、适配业态判断
-## 三、交通可达性分析
-## 四、消费潜力分析
-## 五、共生业态分析
-## 六、竞争压力分析
-## 七、主要优势
-## 八、主要风险
-## 九、经营建议
-## 十、数据来源与限制说明
+必须按以下二级标题原样、依次输出：
+{headings}
 
-要求：
-1. 所有结论必须来自结构化输入字段。
-2. 不允许编造真实租金、真实客流、真实营收。
-3. 对真实租金、真实客流、真实营收、停车条件、工商信用等缺失数据，必须写“当前未接入，后续可补充”。
-4. 当前结果是区域粗筛和 1km 评价网格细筛，不输出具体门牌号。
-5. 语言正式、适合初赛方案或演示系统展示。
+硬性要求：
+1. 不得添加结构化输入之外的事实、数值、地址或经营结论。
+2. employment_customer_proxy 只能解释为 POI 构成的就业/办公客群代理，不能解释为真实就业人口或人口密度。
+3. 官方数据当前为贵州省级，只作整体市场背景与适用边界，不参与区县或网格评分。
+4. 必须说明结果来自关键词 POI 样本统一口径下的相对评价。
+5. 不得写成完整设施总量、租金、客流、营收、盈利或门牌号级预测。
+6. 语言正式、简洁，适合比赛答辩和项目演示。
 """.strip()
 
 
-def create_qianwen_client(
-    *,
-    api_key: str | None = None,
-    base_url: str | None = None,
-) -> Any:
-    """Create an OpenAI-compatible Qianwen client from environment configuration."""
-    resolved_api_key = api_key or os.getenv("DASHSCOPE_API_KEY")
-    if not resolved_api_key:
-        raise MissingQianwenConfigError("缺少 DASHSCOPE_API_KEY，无法调用千问/DashScope 生成报告。")
-    resolved_base_url = base_url or os.getenv("QIANWEN_BASE_URL", DEFAULT_QIANWEN_BASE_URL)
+def validate_report_content(content: Any) -> str:
+    """Require a non-empty report containing every exact heading."""
+    if not isinstance(content, str) or not content.strip():
+        raise InvalidReportContentError("DeepSeek 返回的报告正文为空")
+    missing = [heading for heading in REPORT_HEADINGS if heading not in content]
+    if missing:
+        raise InvalidReportContentError(
+            "DeepSeek 报告缺少规定章节：" + ", ".join(missing)
+        )
+    return content.strip() + "\n"
+
+
+def _is_retryable_error(error: BaseException) -> bool:
+    status_code = getattr(error, "status_code", None)
+    if status_code == 404 or status_code == 429:
+        return True
+    if isinstance(status_code, int) and 500 <= status_code <= 599:
+        return True
     try:
-        from openai import OpenAI
-    except ImportError as exc:
-        raise MissingQianwenConfigError("缺少 openai 依赖，请先安装 requirements.txt。") from exc
-    return OpenAI(api_key=resolved_api_key, base_url=resolved_base_url)
+        from openai import APIConnectionError, APITimeoutError
+    except ImportError:
+        return False
+    return isinstance(error, (APIConnectionError, APITimeoutError))
 
 
-def call_qianwen_report(
-    region_record: Mapping[str, Any],
-    business_type: str,
-    *,
-    llm_client: Any | None = None,
-    model: str | None = None,
+def _model_config(
+    config: dict[str, Any] | None,
+    primary_model: str | None,
+    fallback_model: str | None,
+) -> tuple[str, str]:
+    values = _llm_config(config)
+    primary = (
+        primary_model
+        or os.getenv("DEEPSEEK_PRIMARY_MODEL")
+        or str(values["primary_model"])
+    )
+    fallback = (
+        fallback_model
+        or os.getenv("DEEPSEEK_FALLBACK_MODEL")
+        or str(values["fallback_model"])
+    )
+    return primary, fallback
+
+
+def _call_model(
+    client: Any,
+    model: str,
+    prompt: str,
 ) -> str:
-    """Generate a report through Qianwen OpenAI-compatible Chat Completions."""
-    client = llm_client or create_qianwen_client()
-    resolved_model = model or os.getenv("QIANWEN_MODEL", DEFAULT_QIANWEN_MODEL)
     completion = client.chat.completions.create(
-        model=resolved_model,
+        model=model,
         messages=[
             {
                 "role": "system",
-                "content": "你是商业选址分析师，只能依据输入字段生成报告，不得编造缺失数据。",
+                "content": "你是商业选址分析师，只能依据结构化输入生成报告。",
             },
-            {"role": "user", "content": build_report_prompt(region_record, business_type)},
+            {"role": "user", "content": prompt},
         ],
+        extra_body={"thinking": {"type": "disabled"}},
         temperature=0.2,
+        max_tokens=4096,
+        stream=False,
     )
-    return completion.choices[0].message.content
+    choices = getattr(completion, "choices", None)
+    content = (
+        choices[0].message.content
+        if choices and getattr(choices[0], "message", None)
+        else None
+    )
+    return validate_report_content(content)
 
 
-def generate_template_report(region_record: Mapping[str, Any], business_type: str) -> str:
-    """Generate a deterministic ten-section template report."""
-    region_name = str(region_record.get("grid_region_name", region_record.get("region_name", "评价区域")))
-    grid_id = _grid_identifier(region_record)
-    score_field = _score_field_for_business(business_type)
-    score = _format_score(region_record.get(score_field, "待计算"))
-    advantage = _record_value(region_record, "main_advantage", "当前未接入，后续可补充")
-    risk = _record_value(region_record, "main_risk", "当前未接入，后续可补充")
-    lon = _record_value(region_record, "centroid_lon", _record_value(region_record, "grid_center_lon"))
-    lat = _record_value(region_record, "centroid_lat", _record_value(region_record, "grid_center_lat"))
-    area = _format_score(_record_value(region_record, "area_km2", _record_value(region_record, "grid_area_sq_km")))
-    traffic = _format_score(_record_value(region_record, "traffic_accessibility"))
-    consumption = _format_score(_record_value(region_record, "consumption_potential"))
-    synergy = _format_score(_record_value(region_record, "synergy_score"))
-    competition = _format_score(_record_value(region_record, "competition_pressure"))
+def _format_number(value: Any) -> str:
+    return f"{float(value):.2f}"
 
-    return f"""# {region_name} {business_type}选址报告
 
-本报告为模板生成，用于 API 不可用或离线验证场景；大模型生成时会基于同一组结构化字段输出。
+def generate_template_report(
+    record: Mapping[str, Any],
+    profile: ResultProfileSpec,
+    official_context: Mapping[str, str],
+) -> str:
+    """Generate the deterministic v2 eleven-section report."""
+    payload = build_report_payload(record, profile, official_context)
+    grid = payload["grid"]
+    metrics = payload["metrics"]
+    recommendation = payload["recommendation"]
+    weights = payload["profile"]["weights"]
+    weight_text = "、".join(
+        f"{WEIGHT_LABELS[field]} {float(weights[field]) * 100:.0f}%"
+        for field in WEIGHT_LABELS
+    )
+    return f"""# {grid['district_name']} {profile.profile_name}选址报告
 
-## 一、候选网格基本信息
+{REPORT_HEADINGS[0]}
 
-- grid_id：`{grid_id}`
-- 所属区域：{region_name}
-- 网格中心经度：{lon}
-- 网格中心纬度：{lat}
-- 面积：{area} 平方公里
+- 网格标识：`{grid['grid_id']}`
+- 所属区县：{grid['district_name']}
+- 中心经纬度：{grid['centroid_lon']}，{grid['centroid_lat']}
+- 裁剪面积：{_format_number(grid['area_km2'])} 平方公里
+- POI 类别覆盖：{grid['poi_category_coverage']} 类
+- POI 类别计数合计：{grid['poi_total_count']}
 
-## 二、适配业态判断
+{REPORT_HEADINGS[1]}
 
-当前业态为{business_type}，对应评分字段为 `{score_field}`，综合评分为 {score}。该判断仅基于已接入的空间评分字段。
+当前评分方案为“{profile.profile_name}”，综合得分 {_format_number(recommendation['score'])}，全局排名第 {int(float(recommendation['global_rank']))}，区县排名第 {int(float(recommendation['district_rank']))}，推荐等级为“{recommendation['level']}”。
 
-## 三、交通可达性分析
+{REPORT_HEADINGS[2]}
 
-交通可达性得分为 {traffic}，主要来自道路密度、路口密度和公交站密度等字段。
+交通可达性得分为 {_format_number(metrics['traffic_accessibility'])}，用于同一 POI 查询口径下的网格相对比较。
 
-## 四、消费潜力分析
+{REPORT_HEADINGS[3]}
 
-消费潜力得分为 {consumption}，主要来自居住、商业、零售用地和商超配套等字段。
+消费潜力得分为 {_format_number(metrics['consumption_potential'])}，反映当前已接入生活服务设施的相对支撑程度。
 
-## 五、共生业态分析
+{REPORT_HEADINGS[4]}
 
-共生业态得分为 {synergy}，主要来自学校、医院、商场、办公和居住配套等字段。
+就业/办公客群代理得分为 {_format_number(metrics['employment_customer_proxy'])}。该指标由写字楼、商场、学校、餐饮等 POI 构成，不是真实就业人口密度。
 
-## 六、竞争压力分析
+{REPORT_HEADINGS[5]}
 
-竞争压力得分为 {competition}。竞争压力是风险分析字段，不代表真实客流或真实营收。
+共生业态得分为 {_format_number(metrics['synergy_score'])}，使用 `{profile.synergy_field}` 字段。
 
-## 七、主要优势
+{REPORT_HEADINGS[6]}
 
-当前主要优势为：{advantage}。
+竞争压力为 {_format_number(metrics['competition_pressure'])}，转换后的低竞争得分为 {_format_number(metrics['competition_score'])}。该结果不代表企业真实经营状态。
 
-## 八、主要风险
+{REPORT_HEADINGS[7]}
 
-当前主要风险为：{risk}。
+商业氛围得分为 {_format_number(metrics['business_atmosphere'])}。本方案六维权重为：{weight_text}。
 
-## 九、经营建议
+{REPORT_HEADINGS[8]}
 
-建议将该网格作为前期实地调研对象，结合现场客流、租金水平、门店面积、竞品分布和停车条件进一步复核。
+主要优势：{recommendation['main_advantage']}。主要风险：{recommendation['main_risk']}。
 
-## 十、数据来源与限制说明
+{REPORT_HEADINGS[9]}
 
-官方宏观经济和就业数据用于贵州整体市场背景说明；OSM 空间数据用于区域和 1km 评价网格差异计算。真实租金、真实客流、真实营收、停车条件、工商信用当前未接入，后续可补充。
+建议将该网格作为实地调研对象，进一步核验现场客流、租金、门店条件、竞品经营状态和停车便利性后再做经营决策。
+
+{REPORT_HEADINGS[10]}
+
+官方宏观与就业数据当前为贵州省级，只作整体市场背景与数据适用边界说明，不参与网格评分，也不用于制造区县差异。网格结果来自关键词 POI 样本统一口径下的相对评价，不代表完整设施总量，不是租金、客流、营收或盈利预测，也不是门牌号级推荐。
 """
-
-
-def load_grid_results(path: str | Path = GRID_STAGE_RESULT) -> pd.DataFrame:
-    """Load grid-stage score results."""
-    result_path = Path(path)
-    if not result_path.exists():
-        raise FileNotFoundError(f"网格细筛结果不存在：{result_path}")
-    return pd.read_csv(result_path)
-
-
-def _find_grid_record(data: pd.DataFrame, grid_id: str) -> dict[str, Any]:
-    """Find one grid record by exact grid identifier fields."""
-    if "region_id" not in data.columns:
-        raise KeyError("网格细筛结果缺少 region_id 字段")
-    region_match = data["region_id"].astype(str).eq(str(grid_id))
-    if "grid_id" in data.columns:
-        grid_match = data["grid_id"].astype(str).eq(str(grid_id))
-        matched = data[region_match | grid_match]
-    else:
-        matched = data[region_match]
-    if matched.empty:
-        raise KeyError(f"未找到评价网格：{grid_id}")
-    return matched.iloc[0].to_dict()
 
 
 def generate_site_report(
     grid_id: str,
-    business_type: str,
-    result_path: str | Path = GRID_STAGE_RESULT,
+    profile: ResultProfileSpec,
     *,
     use_llm: bool = True,
     llm_client: Any | None = None,
-    model: str | None = None,
-) -> str:
-    """Generate a site-selection report for one evaluation grid."""
-    data = load_grid_results(result_path)
-    record = _find_grid_record(data, grid_id)
-    if use_llm:
-        return call_qianwen_report(record, business_type, llm_client=llm_client, model=model)
-    return generate_template_report(record, business_type)
+    config: dict[str, Any] | None = None,
+    api_key: str | None = None,
+    base_url: str | None = None,
+    primary_model: str | None = None,
+    fallback_model: str | None = None,
+    macro_path: str | Path = MACRO_PATH,
+    employment_path: str | Path = EMPLOYMENT_PATH,
+) -> ReportGenerationResult:
+    """Generate one active-grid report for a default or custom profile."""
+    record = _find_active_record(profile, grid_id)
+    official_context = load_official_data_context(
+        macro_path,
+        employment_path,
+    )
+    if not use_llm:
+        return ReportGenerationResult(
+            content=generate_template_report(
+                record,
+                profile,
+                official_context,
+            ),
+            mode="template",
+            model=None,
+            used_fallback=False,
+        )
+
+    client = llm_client or create_deepseek_client(
+        api_key=api_key,
+        base_url=base_url,
+        config=config,
+    )
+    primary, fallback = _model_config(
+        config,
+        primary_model,
+        fallback_model,
+    )
+    prompt = build_report_prompt(record, profile, official_context)
+    try:
+        content = _call_model(client, primary, prompt)
+        return ReportGenerationResult(
+            content=content,
+            mode="deepseek",
+            model=primary,
+            used_fallback=False,
+        )
+    except InvalidReportContentError:
+        raise
+    except Exception as error:
+        if not _is_retryable_error(error):
+            raise
+
+    content = _call_model(client, fallback, prompt)
+    return ReportGenerationResult(
+        content=content,
+        mode="deepseek",
+        model=fallback,
+        used_fallback=True,
+    )
 
 
 def export_report(
+    report: ReportGenerationResult,
     grid_id: str,
-    business_type: str,
+    profile: ResultProfileSpec,
     output_path: str | Path | None = None,
     *,
-    result_path: str | Path = GRID_STAGE_RESULT,
-    use_llm: bool = True,
-    llm_client: Any | None = None,
-    model: str | None = None,
+    reports_dir: str | Path = REPORTS_DIR,
 ) -> Path:
-    """Export a Markdown report for one evaluation grid."""
-    ensure_output_dirs()
-    REPORTS_DIR.mkdir(parents=True, exist_ok=True)
-    path = Path(output_path) if output_path is not None else REPORTS_DIR / f"{grid_id}_{business_type}_选址报告.md"
-    path.write_text(
-        generate_site_report(
-            grid_id,
-            business_type,
-            result_path=result_path,
-            use_llm=use_llm,
-            llm_client=llm_client,
-            model=model,
-        ),
-        encoding="utf-8",
+    """Atomically export one Markdown report without model metadata."""
+    target = (
+        Path(output_path)
+        if output_path is not None
+        else Path(reports_dir)
+        / profile.profile_id
+        / f"{grid_id}_选址报告.md"
     )
-    return path
+    target.parent.mkdir(parents=True, exist_ok=True)
+    with tempfile.NamedTemporaryFile(
+        mode="w",
+        encoding="utf-8",
+        newline="",
+        delete=False,
+        dir=target.parent,
+        suffix=".tmp",
+    ) as file:
+        file.write(report.content)
+        temporary = Path(file.name)
+    try:
+        os.replace(temporary, target)
+    finally:
+        temporary.unlink(missing_ok=True)
+    return target
 
 
-def parse_args() -> argparse.Namespace:
-    """Parse CLI arguments."""
-    parser = argparse.ArgumentParser(description="生成评价网格选址报告。")
-    parser.add_argument("--grid-id", default=None, help="评价网格 region_id；不提供时默认使用评分结果第一行。")
-    parser.add_argument("--business-type", default="社区便利店", choices=["社区便利店", "轻餐饮"])
-    parser.add_argument("--template", action="store_true", help="使用模板生成，不调用千问/DashScope。")
-    return parser.parse_args()
+def build_parser() -> argparse.ArgumentParser:
+    """Build the Step 10 command-line parser."""
+    parser = argparse.ArgumentParser(
+        description="生成 v2 DeepSeek 智能选址报告。"
+    )
+    parser.add_argument("--profile", default="convenience")
+    parser.add_argument("--grid-id")
+    parser.add_argument(
+        "--template",
+        action="store_true",
+        help="使用规则模板，不调用 DeepSeek。",
+    )
+    return parser
 
 
 def main() -> None:
-    """CLI entry point."""
-    args = parse_args()
+    """Generate and export one profile report."""
+    args = build_parser().parse_args()
+    specs = profile_specs_by_id()
+    if args.profile not in specs:
+        raise ValueError(f"评分方案不存在：{args.profile}")
+    profile = specs[args.profile]
     grid_id = args.grid_id
     if grid_id is None:
-        data = load_grid_results()
-        if data.empty:
-            raise ValueError("网格细筛结果为空，无法生成报告。")
-        grid_id = str(data.iloc[0].get("grid_id", data.iloc[0]["region_id"]))
-    output_path = export_report(grid_id, args.business_type, use_llm=not args.template)
-    print(output_path)
+        active = active_profile_results(profile)
+        if active.empty:
+            raise ValueError(f"评分方案 {profile.profile_id} 没有活跃排名网格")
+        grid_id = str(active.iloc[0]["grid_id"])
+    report = generate_site_report(
+        grid_id,
+        profile,
+        use_llm=not args.template,
+    )
+    output = export_report(report, grid_id, profile)
+    print(output)
 
 
 if __name__ == "__main__":

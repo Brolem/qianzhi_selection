@@ -10,6 +10,29 @@ import pandas as pd
 from src.visualization import map_viz
 
 
+WEIGHTS = {
+    "traffic_accessibility": 0.20,
+    "consumption_potential": 0.25,
+    "employment_customer_proxy": 0.10,
+    "synergy_score": 0.20,
+    "competition_pressure": 0.15,
+    "business_atmosphere": 0.10,
+}
+
+
+def write_metadata(path: Path, profiles: list[dict]) -> None:
+    path.write_text(
+        json.dumps(
+            {
+                "schema_version": 1,
+                "profiles": profiles,
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+
+
 def make_default_result(path: Path) -> Path:
     rows = []
     for index, active in enumerate([True, False, True], start=1):
@@ -45,6 +68,23 @@ def make_default_result(path: Path) -> Path:
             }
         )
     pd.DataFrame(rows).to_csv(path, index=False, encoding="utf-8-sig")
+    write_metadata(
+        path.parent / "profile_metadata.json",
+        [
+            {
+                "profile_id": "convenience",
+                "profile_name": "社区便利店",
+                "template_id": "community_retail",
+                "weights": WEIGHTS,
+            },
+            {
+                "profile_id": "light_food",
+                "profile_name": "轻餐饮",
+                "template_id": "food_service",
+                "weights": WEIGHTS,
+            },
+        ],
+    )
     return path
 
 
@@ -75,6 +115,17 @@ def make_custom_result(path: Path, profile_id: str = "custom_01") -> Path:
     custom["profile_main_risk"] = ["竞争压力较高", "缺少可用于推荐的POI活动", "消费潜力不足"]
     custom["profile_recommendation_level"] = ["推荐", "暂不推荐", "暂不推荐"]
     custom.to_csv(path, index=False, encoding="utf-8-sig")
+    write_metadata(
+        path.parent / "profile_metadata.json",
+        [
+            {
+                "profile_id": profile_id,
+                "profile_name": "自定义社区业态",
+                "template_id": "community_retail",
+                "weights": WEIGHTS,
+            }
+        ],
+    )
     return path
 
 
@@ -125,12 +176,15 @@ def make_geojson(path: Path) -> Path:
 
 class MapVizTests(unittest.TestCase):
     def test_default_profile_specs_use_exact_step8_fields(self):
-        specs = map_viz.default_profile_specs(Path("result.csv"))
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            base = Path(tmp_dir)
+            result_path = make_default_result(base / "result.csv")
+            specs = map_viz.default_profile_specs(result_path)
 
-        self.assertEqual(specs["convenience"].score_field, "convenience_score")
-        self.assertEqual(specs["convenience"].synergy_field, "convenience_synergy_score")
-        self.assertEqual(specs["light_food"].rank_field, "light_food_rank")
-        self.assertEqual(specs["light_food"].competition_score_field, "light_food_competition_score")
+            self.assertEqual(specs["convenience"].score_field, "convenience_score")
+            self.assertEqual(specs["convenience"].synergy_field, "convenience_synergy_score")
+            self.assertEqual(specs["light_food"].rank_field, "light_food_rank")
+            self.assertEqual(specs["light_food"].competition_score_field, "light_food_competition_score")
 
     def test_discover_custom_profile_specs_uses_file_metadata_and_stable_fields(self):
         with tempfile.TemporaryDirectory() as tmp_dir:

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 import math
 import os
 import re
@@ -577,24 +578,52 @@ def _write_temp_text(target: Path, content: str, encoding: str) -> Path:
         return Path(file.name)
 
 
-def write_three_outputs_atomically(
+def build_profile_metadata(
+    profiles: list[ScoringProfile] | tuple[ScoringProfile, ...],
+) -> dict[str, Any]:
+    """Build the stable structured metadata document for scoring profiles."""
+    return {
+        "schema_version": 1,
+        "profiles": [
+            {
+                "profile_id": profile.profile_id,
+                "profile_name": profile.profile_name.strip(),
+                "template_id": profile.template_id,
+                "weights": {
+                    field: float(profile.weights[field])
+                    for field in WEIGHT_FIELDS
+                },
+            }
+            for profile in profiles
+        ],
+    }
+
+
+def write_profile_outputs_atomically(
     grid_result: pd.DataFrame,
     district_summary: pd.DataFrame,
     report: str,
+    metadata: dict[str, Any],
     grid_path: str | Path,
     district_path: str | Path,
     report_path: str | Path,
+    metadata_path: str | Path,
 ) -> dict[str, Path]:
-    """Replace three related outputs and restore all old files on failure."""
+    """Replace four related profile outputs and restore all on failure."""
     targets = {
         "grid": Path(grid_path),
         "district": Path(district_path),
         "report": Path(report_path),
+        "metadata": Path(metadata_path),
     }
     contents = {
         "grid": (grid_result.to_csv(index=False), "utf-8-sig"),
         "district": (district_summary.to_csv(index=False), "utf-8-sig"),
         "report": (report, "utf-8"),
+        "metadata": (
+            json.dumps(metadata, ensure_ascii=False, indent=2) + "\n",
+            "utf-8",
+        ),
     }
     temporary = {
         key: _write_temp_text(targets[key], *contents[key])
@@ -605,7 +634,7 @@ def write_three_outputs_atomically(
         for key in targets
     }
     try:
-        for key in ["grid", "district", "report"]:
+        for key in ["grid", "district", "report", "metadata"]:
             os.replace(temporary[key], targets[key])
     except Exception:
         for key, target in targets.items():
@@ -631,13 +660,15 @@ def run_custom_profile(
     summary = build_profile_district_summary(scored)
     report = build_custom_report(scored, profile)
     output_dir = Path(results_dir) / "custom_profiles" / profile.profile_id
-    return write_three_outputs_atomically(
+    return write_profile_outputs_atomically(
         scored,
         summary,
         report,
+        build_profile_metadata([profile]),
         output_dir / "grid_score_result.csv",
         output_dir / "district_summary_result.csv",
         output_dir / "recommendation_summary.md",
+        output_dir / "profile_metadata.json",
     )
 
 
@@ -746,13 +777,19 @@ def run_default_scoring(
     district_summary = build_default_district_summary(grid_result)
     report = build_default_report(grid_result, profiles)
     output_dir = Path(results_dir)
-    return write_three_outputs_atomically(
+    ordered_profiles = [
+        profiles["convenience"],
+        profiles["light_food"],
+    ]
+    return write_profile_outputs_atomically(
         grid_result,
         district_summary,
         report,
+        build_profile_metadata(ordered_profiles),
         output_dir / "grid_stage_score_result.csv",
         output_dir / "district_summary_result.csv",
         output_dir / "recommendation_summary.md",
+        output_dir / "profile_metadata.json",
     )
 
 

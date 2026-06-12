@@ -127,3 +127,11 @@ scoring_templates:
   food_service:
     synergy_field: "light_food_synergy_score"
     competition_field: "light_food_competition_pressure"
+
+llm:
+  provider: "deepseek"
+  base_url: "https://api.deepseek.com"
+  primary_model: "deepseek-v4-pro"
+  fallback_model: "deepseek-v4-flash"
+  timeout_seconds: 60
+  primary_max_retries: 1

@@ -3,33 +3,51 @@ import runpy
 import sys
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
+from unittest.mock import Mock
 
 import pandas as pd
 
 from src.app import (
+    PAGE_REGISTRATIONS,
     business_columns,
     load_table,
     map_file_for_business,
     render_map_page,
+    render_report_page,
+    run_navigation,
     top_rows,
 )
+from src.reporting.report_generator import ReportGenerationResult
 from src.visualization.map_viz import MapProfileSpec
 
 
 class FakeStreamlit:
-    def __init__(self, selected_label):
+    def __init__(self, selected_label=None, clicked_buttons=None, session_state=None):
         self.selected_label = selected_label
+        self.clicked_buttons = set(clicked_buttons or [])
+        self.session_state = session_state if session_state is not None else {}
         self.headers = []
         self.errors = []
         self.warnings = []
+        self.infos = []
+        self.markdowns = []
+        self.downloads = []
+        self.selectboxes = {}
 
     def header(self, text):
         self.headers.append(text)
 
     def selectbox(self, label, options, index=0):
+        options = list(options)
+        self.selectboxes[label] = options
         self.selectbox_label = label
-        self.selectbox_options = list(options)
+        self.selectbox_options = options
         self.selectbox_index = index
+        if isinstance(self.selected_label, dict):
+            return self.selected_label.get(label, options[index])
+        if self.selected_label is None:
+            return options[index]
         return self.selected_label
 
     def error(self, text):
@@ -37,6 +55,18 @@ class FakeStreamlit:
 
     def warning(self, text):
         self.warnings.append(text)
+
+    def info(self, text):
+        self.infos.append(text)
+
+    def markdown(self, text):
+        self.markdowns.append(text)
+
+    def button(self, label):
+        return label in self.clicked_buttons
+
+    def download_button(self, label, **kwargs):
+        self.downloads.append((label, kwargs))
 
 
 class FakeComponents:
@@ -53,6 +83,64 @@ class FakeComponents:
         )
 
 
+class FakeNavigationPage:
+    def __init__(self, renderer, *, title, url_path, default=False):
+        self.renderer = renderer
+        self.title = title
+        self.url_path = url_path
+        self.default = default
+
+
+class FakeNavigationController:
+    def __init__(self):
+        self.run_count = 0
+
+    def run(self):
+        self.run_count += 1
+
+
+class FakeSidebar:
+    def __init__(self, selected):
+        self.selected = selected
+        self.radio_calls = []
+
+    def radio(self, label, options):
+        values = list(options)
+        self.radio_calls.append((label, values))
+        return self.selected
+
+
+class FakeNavigationStreamlit:
+    def __init__(self, *, selected_fallback=None, supports_navigation=True):
+        self.created_pages = []
+        self.navigation_calls = []
+        self.controller = FakeNavigationController()
+        self.sidebar = FakeSidebar(selected_fallback)
+        if supports_navigation:
+            self.Page = self._page
+            self.navigation = self._navigation
+
+    def _page(self, renderer, *, title, url_path, default=False):
+        page = FakeNavigationPage(
+            renderer,
+            title=title,
+            url_path=url_path,
+            default=default,
+        )
+        self.created_pages.append(page)
+        return page
+
+    def _navigation(self, pages, *, position, expanded):
+        self.navigation_calls.append(
+            {
+                "pages": list(pages),
+                "position": position,
+                "expanded": expanded,
+            }
+        )
+        return self.controller
+
+
 def make_map_spec(
     profile_id: str,
     profile_name: str,
@@ -63,12 +151,22 @@ def make_map_spec(
         profile_id=profile_id,
         profile_name=profile_name,
         template_id="community_retail",
+        weights={
+            "traffic_accessibility": 0.20,
+            "consumption_potential": 0.25,
+            "employment_customer_proxy": 0.10,
+            "synergy_score": 0.20,
+            "competition_pressure": 0.15,
+            "business_atmosphere": 0.10,
+        },
         result_path=result_path,
+        metadata_path=result_path.parent / "profile_metadata.json",
         static_html_path=static_html_path,
         score_field="profile_score",
         rank_field="profile_rank",
         district_rank_field="district_profile_rank",
         competition_score_field="profile_competition_score",
+        competition_pressure_field="convenience_competition_pressure",
         advantage_field="profile_main_advantage",
         risk_field="profile_main_risk",
         level_field="profile_recommendation_level",
@@ -76,7 +174,143 @@ def make_map_spec(
     )
 
 
+def write_report_result(path: Path) -> Path:
+    rows = []
+    for index in range(60):
+        active = index < 41
+        rows.append(
+            {
+                "grid_id": f"grid_{index + 1:03d}",
+                "district_name": "测试区",
+                "centroid_lon": 106.7,
+                "centroid_lat": 26.6,
+                "area_km2": 1.0,
+                "poi_total_count": 10 if active else 0,
+                "poi_category_coverage": 5 if active else 0,
+                "has_poi_activity": active,
+                "traffic_accessibility": 50.0,
+                "consumption_potential": 50.0,
+                "employment_customer_proxy": 50.0,
+                "business_atmosphere": 50.0,
+                "convenience_synergy_score": 50.0,
+                "convenience_competition_pressure": 50.0,
+                "convenience_competition_score": 50.0,
+                "convenience_score": 100.0 - index if active else 0.0,
+                "convenience_rank": index + 1 if active else None,
+                "convenience_district_rank": index + 1 if active else None,
+                "convenience_main_advantage": "交通可达性",
+                "convenience_main_risk": "消费潜力不足",
+                "convenience_recommendation_level": "推荐" if index < 9 else "暂不推荐",
+            }
+        )
+    pd.DataFrame(rows).to_csv(path, index=False, encoding="utf-8-sig")
+    return path
+
+
+def make_report_spec(result_path: Path) -> MapProfileSpec:
+    return MapProfileSpec(
+        profile_id="convenience",
+        profile_name="社区便利店",
+        template_id="community_retail",
+        weights={
+            "traffic_accessibility": 0.20,
+            "consumption_potential": 0.25,
+            "employment_customer_proxy": 0.10,
+            "synergy_score": 0.20,
+            "competition_pressure": 0.15,
+            "business_atmosphere": 0.10,
+        },
+        result_path=result_path,
+        metadata_path=result_path.parent / "profile_metadata.json",
+        static_html_path=None,
+        score_field="convenience_score",
+        rank_field="convenience_rank",
+        district_rank_field="convenience_district_rank",
+        competition_score_field="convenience_competition_score",
+        competition_pressure_field="convenience_competition_pressure",
+        advantage_field="convenience_main_advantage",
+        risk_field="convenience_main_risk",
+        level_field="convenience_recommendation_level",
+        synergy_field="convenience_synergy_score",
+    )
+
+
 class AppHelperTests(unittest.TestCase):
+    def test_page_registrations_define_eight_workbench_pages_in_order(self):
+        self.assertEqual(
+            [page.title for page in PAGE_REGISTRATIONS],
+            [
+                "项目总览",
+                "数据底座",
+                "选址分析",
+                "区域对比",
+                "网格推荐",
+                "地图洞察",
+                "智能报告",
+                "项目说明",
+            ],
+        )
+        self.assertEqual(
+            [page.url_path for page in PAGE_REGISTRATIONS],
+            [
+                "overview",
+                "data-foundation",
+                "site-analysis",
+                "district-compare",
+                "grid-recommendation",
+                "map-insight",
+                "report-center",
+                "project-notes",
+            ],
+        )
+        self.assertTrue(PAGE_REGISTRATIONS[0].default)
+        self.assertEqual(
+            sum(page.default for page in PAGE_REGISTRATIONS),
+            1,
+        )
+
+    def test_run_navigation_uses_streamlit_page_and_navigation(self):
+        st = FakeNavigationStreamlit()
+
+        run_navigation(st)
+
+        self.assertEqual(len(st.created_pages), 8)
+        self.assertEqual(st.created_pages[0].title, "项目总览")
+        self.assertTrue(st.created_pages[0].default)
+        self.assertEqual(st.navigation_calls[0]["position"], "sidebar")
+        self.assertTrue(st.navigation_calls[0]["expanded"])
+        self.assertEqual(st.controller.run_count, 1)
+        self.assertEqual(st.sidebar.radio_calls, [])
+
+    def test_run_navigation_falls_back_to_sidebar_radio(self):
+        calls = []
+        registrations = [
+            SimpleNamespace(
+                title="页面甲",
+                url_path="page-a",
+                renderer=lambda: calls.append("页面甲"),
+                default=True,
+            ),
+            SimpleNamespace(
+                title="页面乙",
+                url_path="page-b",
+                renderer=lambda: calls.append("页面乙"),
+                default=False,
+            ),
+        ]
+        st = FakeNavigationStreamlit(
+            selected_fallback="页面乙",
+            supports_navigation=False,
+        )
+
+        run_navigation(st, registrations=registrations)
+
+        self.assertEqual(
+            st.sidebar.radio_calls,
+            [("页面", ["页面甲", "页面乙"])],
+        )
+        self.assertEqual(calls, ["页面乙"])
+
     def test_business_columns_returns_exact_fields_for_supported_business_types(self):
         self.assertEqual(business_columns("社区便利店"), ("convenience_score", "rank_convenience"))
         self.assertEqual(business_columns("轻餐饮"), ("light_catering_score", "rank_light_catering"))
@@ -209,6 +443,105 @@ class AppHelperTests(unittest.TestCase):
             self.assertTrue(
                 any("streamlit-folium" in message for message in st.errors)
             )
+
+    def test_render_report_page_calls_deepseek_only_on_button_and_caches_result(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            base = Path(tmp_dir)
+            result_path = write_report_result(base / "result.csv")
+            spec = make_report_spec(result_path)
+            specs = {"默认｜社区便利店": spec}
+            session_state = {}
+            generator = Mock(
+                return_value=ReportGenerationResult(
+                    content="# 智能报告",
+                    mode="deepseek",
+                    model="deepseek-v4-pro",
+                    used_fallback=False,
+                )
+            )
+
+            idle = FakeStreamlit(
+                selected_label={"评分方案": "默认｜社区便利店"},
+                session_state=session_state,
+            )
+            render_report_page(
+                idle,
+                "社区便利店",
+                profile_specs=specs,
+                report_generator_func=generator,
+            )
+            generator.assert_not_called()
+            self.assertEqual(len(idle.selectboxes["评价网格"]), 41)
+
+            clicked = FakeStreamlit(
+                selected_label={"评分方案": "默认｜社区便利店"},
+                clicked_buttons={"生成智能报告"},
+                session_state=session_state,
+            )
+            render_report_page(
+                clicked,
+                "社区便利店",
+                profile_specs=specs,
+                report_generator_func=generator,
+            )
+            generator.assert_called_once()
+            self.assertIn("deepseek-v4-pro", clicked.infos[0])
+            self.assertEqual(clicked.markdowns, ["# 智能报告"])
+
+            refreshed = FakeStreamlit(
+                selected_label={"评分方案": "默认｜社区便利店"},
+                session_state=session_state,
+            )
+            render_report_page(
+                refreshed,
+                "社区便利店",
+                profile_specs=specs,
+                report_generator_func=generator,
+            )
+            generator.assert_called_once()
+            self.assertEqual(refreshed.markdowns, ["# 智能报告"])
+
+    def test_render_report_page_offers_template_after_deepseek_failure(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            base = Path(tmp_dir)
+            spec = make_report_spec(write_report_result(base / "result.csv"))
+            specs = {"默认｜社区便利店": spec}
+            session_state = {}
+            generator = Mock(side_effect=Exception("DeepSeek unavailable"))
+
+            failed = FakeStreamlit(
+                selected_label={"评分方案": "默认｜社区便利店"},
+                clicked_buttons={"生成智能报告"},
+                session_state=session_state,
+            )
+            render_report_page(
+                failed,
+                "社区便利店",
+                profile_specs=specs,
+                report_generator_func=generator,
+            )
+            self.assertIn("DeepSeek unavailable", failed.errors[0])
+
+            generator.side_effect = None
+            generator.return_value = ReportGenerationResult(
+                content="# 模板报告",
+                mode="template",
+                model=None,
+                used_fallback=False,
+            )
+            fallback = FakeStreamlit(
+                selected_label={"评分方案": "默认｜社区便利店"},
+                clicked_buttons={"使用模板报告"},
+                session_state=session_state,
+            )
+            render_report_page(
+                fallback,
+                "社区便利店",
+                profile_specs=specs,
+                report_generator_func=generator,
+            )
+            self.assertEqual(generator.call_args.kwargs["use_llm"], False)
+            self.assertEqual(fallback.markdowns, ["# 模板报告"])
 
     def test_app_script_imports_when_streamlit_runs_file_path(self):
         project_root = Path(__file__).resolve().parents[1]

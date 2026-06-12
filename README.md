@@ -29,8 +29,10 @@ v2 已完成的基础数据链路包括：
 - 社区便利店与轻餐饮的默认差异化评分、全局/区县排名和推荐等级。
 - 基于六维权重与两类指标模板的自定义评分方案命令行入口。
 - 基于 790 个空间网格的便利店与轻餐饮评分地图，以及自定义评分方案动态地图。
+- 基于 Step 8 正式结果的 DeepSeek 智能选址报告，支持默认与自定义评分方案。
+- 基于 `st.Page` 和 `st.navigation` 的八页 Streamlit 工作台，并保留旧版本 sidebar radio 回退。
 
-当前 Step 9 地图以 790 个空间网格提供完整研究范围，其中 730 个未采集网格显示为空间背景，19 个无 POI 活动网格保留审计状态，41 个活跃网格按评分着色。指标和排名用于同一查询口径下的相对比较，不解释为真实完整设施总量。完整工作台页面和前端权重编辑控件仍待实施。
+当前 Step 11 工作台包含项目总览、数据底座、选址分析、区域对比、网格推荐、地图洞察、智能报告和项目说明。项目总览、数据底座、选址分析、区域对比和网格推荐已读取真实 v2 输出提供最小只读内容；地图洞察和智能报告保留 Step 9–10 的完整可用能力。复杂页面交互和视觉样式将在 Step 12–17 继续增强。
 
 ## 3. 目标区县与业务对象
 
@@ -95,8 +97,12 @@ qianzhi_selection/
 │   ├── reporting/
 │   ├── selection/
 │   ├── visualization/
+│   ├── pages/
 │   ├── app.py
-│   └── config.py
+│   ├── app_legacy.py
+│   ├── config.py
+│   ├── profile_catalog.py
+│   └── scoring_model.py
 ├── tests/
 ├── config.yaml
 ├── README.md
@@ -142,7 +148,7 @@ python -m venv .venv
 python -m pip install -r requirements.txt
 ```
 
-运行旧版数据与演示入口：
+运行 legacy 数据链路：
 
 ```bash
 python -m src.data.official_pipeline
@@ -150,8 +156,6 @@ python -m src.osm.inventory
 python -m src.osm.pipeline --no-download
 python -m src.selection.two_stage --top-n 5 --grid-size-m 1000
 python -m src.visualization.map_viz
-python -m src.reporting.report_generator --template
-streamlit run src/app.py
 ```
 
 v2 一键流程将在后续实施 `docs/项目执行计划.md` 后补齐。
@@ -183,11 +187,33 @@ python src/scoring_model.py `
 python -m src.visualization.map_viz
 ```
 
-运行 Streamlit 后，“地图展示”页可选择默认便利店、默认轻餐饮或 `outputs/results/custom_profiles/` 下的有效自定义方案：
+配置 DeepSeek 当前用户环境变量后生成便利店 Top 1 智能报告：
+
+```powershell
+$env:DEEPSEEK_API_KEY = [Environment]::GetEnvironmentVariable("DEEPSEEK_API_KEY", "User")
+python -m src.reporting.report_generator `
+  --profile convenience `
+  --grid-id grid_520103_000078
+```
+
+使用规则模板、不调用 API：
+
+```powershell
+python -m src.reporting.report_generator `
+  --profile convenience `
+  --grid-id grid_520103_000078 `
+  --template
+```
+
+`--profile` 支持 `convenience`、`light_food` 和 `outputs/results/custom_profiles/` 下具有有效 `profile_metadata.json` 的方案标识。报告默认写入 `outputs/reports/<profile_id>/`。
+
+启动八页 Streamlit 工作台：
 
 ```powershell
 streamlit run src/app.py
 ```
+
+“选址分析”“网格推荐”“地图洞察”和“智能报告”分别使用页面内评分方案选择器，支持默认便利店、默认轻餐饮和有效自定义方案。旧入口实现保留在 `src/app_legacy.py`，不作为 v2 默认启动入口。
 
 ## 8. 验证方法
 
@@ -206,11 +232,12 @@ rg -n "全量高德|精准盈利|真实租金|真实客流|门牌号级" README.
 
 ## 9. 当前限制
 
-- v2 当前已完成区县边界、空间网格、60 网格 POI 样本、指标工程、Step 8 网格评分和 Step 9 地图生成。
+- v2 当前已完成区县边界、空间网格、60 网格 POI 样本、指标工程、Step 8 网格评分、Step 9 地图生成、Step 10 DeepSeek 智能报告和 Step 11 八页工作台架构。
 - 60 网格 POI 统计采用统一关键词口径，适合相对比较，不代表完整 POI 总量。
 - 19 个全零样本网格保留用于审计，评分结果将其得分固定为 0 且不进入排名。
 - 自定义权重只改变现有六维指标贡献；新增正式业态仍需补充对应 POI 和指标模板。
-- 地图页已读取 v2 默认与自定义评分结果；其他页面仍保留 v1 展示，尚未完成整体工作台改造。
+- 八个工作台页面均已切换到 v2 口径；Step 12–17 仍需继续补充视觉样式、步骤式分析、图表和页面联动。
 - 高德边界和中心点原始文件保持 GCJ-02，地图显示阶段临时转换为 WGS84 以对齐开放底图。
 - 当前未接入工商主体、信用、租赁、实时客流、停车条件和门店经营流水数据。
 - 官方宏观经济与就业数据只用于背景说明，不硬拆到 1km 评价网格。
+- 官方数据当前真实地域范围为贵州省级，只用于报告中的市场背景和适用边界，不参与网格评分，也不用于制造区县差异。

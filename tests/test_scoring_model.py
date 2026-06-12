@@ -1,4 +1,5 @@
 import os
+import json
 import tempfile
 import unittest
 from pathlib import Path
@@ -280,38 +281,41 @@ class ScoringModelTests(unittest.TestCase):
         self.assertEqual(profile.template_id, "community_retail")
         self.assertAlmostEqual(sum(profile.weights.values()), 1.0)
 
-    def test_three_output_failure_restores_existing_files(self):
+    def test_four_output_failure_restores_existing_files(self):
         with tempfile.TemporaryDirectory() as tmp_dir:
             base = Path(tmp_dir)
             paths = {
                 "grid": base / "grid.csv",
                 "district": base / "district.csv",
                 "report": base / "report.md",
+                "metadata": base / "profile_metadata.json",
             }
             for key, path in paths.items():
                 path.write_text(f"existing {key}", encoding="utf-8")
             real_replace = os.replace
             call_count = 0
 
-            def fail_third_replace(source, target):
+            def fail_fourth_replace(source, target):
                 nonlocal call_count
                 call_count += 1
-                if call_count == 3:
-                    raise OSError("simulated report replace failure")
+                if call_count == 4:
+                    raise OSError("simulated metadata replace failure")
                 return real_replace(source, target)
 
             with patch(
                 "src.scoring_model.os.replace",
-                side_effect=fail_third_replace,
+                side_effect=fail_fourth_replace,
             ):
-                with self.assertRaisesRegex(OSError, "simulated report replace failure"):
-                    scoring_model.write_three_outputs_atomically(
+                with self.assertRaisesRegex(OSError, "simulated metadata replace failure"):
+                    scoring_model.write_profile_outputs_atomically(
                         grid_result=make_scoring_input(rows=1),
                         district_summary=pd.DataFrame([{"district_name": "测试区"}]),
                         report="new report",
+                        metadata={"schema_version": 1, "profiles": []},
                         grid_path=paths["grid"],
                         district_path=paths["district"],
                         report_path=paths["report"],
+                        metadata_path=paths["metadata"],
                     )
 
             for key, path in paths.items():
@@ -331,9 +335,48 @@ class ScoringModelTests(unittest.TestCase):
             self.assertEqual(second_paths["grid"].parent.name, "custom_02")
             self.assertTrue(first_paths["grid"].exists())
             self.assertTrue(second_paths["grid"].exists())
+            self.assertTrue(first_paths["metadata"].exists())
             first_result = pd.read_csv(first_paths["grid"])
             self.assertIn("profile_score", first_result)
             self.assertEqual(first_result["profile_id"].unique().tolist(), ["custom_01"])
+            metadata = json.loads(
+                first_paths["metadata"].read_text(encoding="utf-8")
+            )
+            self.assertEqual(metadata["schema_version"], 1)
+            self.assertEqual(metadata["profiles"][0]["profile_id"], "custom_01")
+            self.assertEqual(metadata["profiles"][0]["weights"], first.weights)
+
+    def test_default_outputs_include_two_profile_metadata_records(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            results_dir = Path(tmp_dir)
+            frame = make_scoring_input(rows=3)
+            profiles = {
+                "convenience": make_profile(
+                    profile_id="convenience",
+                    profile_name="社区便利店",
+                ),
+                "light_food": make_profile(
+                    profile_id="light_food",
+                    profile_name="轻餐饮",
+                    template_id="food_service",
+                ),
+            }
+
+            paths = scoring_model.run_default_scoring(
+                frame,
+                profiles,
+                scoring_model.DEFAULT_TEMPLATES,
+                results_dir,
+            )
+
+            metadata = json.loads(
+                paths["metadata"].read_text(encoding="utf-8")
+            )
+            self.assertEqual(metadata["schema_version"], 1)
+            self.assertEqual(
+                [item["profile_id"] for item in metadata["profiles"]],
+                ["convenience", "light_food"],
+            )
 
 
 if __name__ == "__main__":

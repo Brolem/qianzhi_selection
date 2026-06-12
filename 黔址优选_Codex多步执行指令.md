@@ -873,46 +873,57 @@ python -m src.visualization.map_viz
 
 ### 目标
 
-用模板或大模型生成可解释选址报告。
+基于 Step 8 正式评分结果，用 DeepSeek 或规则模板生成可解释选址报告。
 
 ### 给 Codex 的指令
 
 ```text
 任务 10：选址报告生成模块。
 
-新增或重构 src/report_generator.py。
+实际模块路径为 src/reporting/report_generator.py。
+新增共享评分方案目录 src/profile_catalog.py。
 
 输入：
 - outputs/results/grid_stage_score_result.csv
-- data/processed/grid_scoring_input.csv
-- 官方数据背景报告
+- outputs/results/profile_metadata.json
+- outputs/results/custom_profiles/<profile_id>/grid_score_result.csv
+- outputs/results/custom_profiles/<profile_id>/profile_metadata.json
+- data/processed/official/macro_clean.csv
+- data/processed/official/employment_clean.csv
 
 输出：
-- outputs/reports/{grid_id}_{business_type}_site_report.md
+- outputs/reports/<profile_id>/<grid_id>_选址报告.md
 
 实现函数：
-1. load_grid_results()
-2. generate_site_report(grid_id, business_type)
-3. export_report(grid_id, business_type, output_path)
+1. profile_specs_by_id()
+2. active_profile_results(profile)
+3. generate_site_report(grid_id, profile)
+4. export_report(report, grid_id, profile, output_path)
 
 报告结构：
-一、候选网格基本信息
-二、适配业态判断
+一、评价网格基本信息
+二、适配业态与推荐等级
 三、交通可达性分析
 四、消费潜力分析
 五、就业/办公客群代理分析
 六、共生业态分析
 七、竞争压力分析
-八、主要优势
-九、主要风险
+八、商业氛围与权重方案
+九、主要优势与风险
 十、经营建议
 十一、数据来源与限制说明
 
 要求：
-- 默认用规则模板生成；
-- 如果配置了 LLM_API_KEY，可作为可选增强；
+- 默认读取 DEEPSEEK_API_KEY 并使用 deepseek-v4-pro 非思考模式；
+- Pro 仅在连接、超时、限流、服务端错误或模型不可用时回退 deepseek-v4-flash；
+- 鉴权、余额、请求格式、参数和输入数据错误不得回退；
+- CLI 可通过 --template 明确使用规则模板；
+- 支持 convenience、light_food 和有效自定义评分方案；
+- 只为有 POI 活动且具有有效排名的网格生成报告；
 - 所有结论必须来自输入字段；
-- 缺失数据要明确写“当前未接入”。
+- 官方宏观与就业数据当前只作贵州省级背景和适用边界说明，不参与网格评分；
+- employment_customer_proxy 只能解释为 POI 构成的就业/办公客群代理；
+- 返回正文为空或缺少规定章节时不得导出。
 
 禁止：
 - 不要编造租金；
@@ -924,7 +935,7 @@ python -m src.visualization.map_viz
 ### 验收命令
 
 ```bash
-python src/report_generator.py
+python -m src.reporting.report_generator --profile convenience --grid-id grid_520103_000078
 ```
 
 ---
@@ -984,6 +995,15 @@ render_site_analysis()
 - 不要把所有页面堆在一个长页面；
 - 不要删除旧 app.py，可先备份为 src/app_legacy.py。
 ```
+
+### 当前实际实施
+
+- 当前 Streamlit 版本为 `1.58.0`，正式入口使用 `st.Page` 和 `st.navigation`，并保留 sidebar radio 回退。
+- `src/app.py` 只负责宽屏配置、八页注册和导航；原入口保留为 `src/app_legacy.py`。
+- 页面模块实际位于 `src/pages/`，文件名采用无数字前缀的 Python 模块名，并通过稳定的页面注册顺序控制导航。
+- “选址分析”“网格推荐”“地图洞察”和“智能报告”使用各页面独立评分方案选择器，不保留全局固定业态侧栏。
+- 项目总览、数据底座、选址分析、区域对比和网格推荐只提供真实 v2 输出的最小只读内容；视觉样式与完整交互仍按 Step 12–17 分步实施。
+- 地图和报告页面迁移后继续兼容 Step 9–10 的默认、自定义方案、静态回退、会话缓存和模板报告行为。
 
 ### 验收命令
 

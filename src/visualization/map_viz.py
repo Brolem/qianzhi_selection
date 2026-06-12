@@ -7,10 +7,8 @@ import html
 import json
 import math
 import os
-import re
 import sys
 import tempfile
-from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -22,20 +20,21 @@ if __package__ in {None, ""}:
     sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from src.config import get_path
+from src.profile_catalog import (
+    CUSTOM_PROFILES_DIR,
+    DEFAULT_METADATA_PATH,
+    DEFAULT_RESULT_PATH,
+    ResultProfileSpec,
+    available_profile_specs as catalog_available_profile_specs,
+    default_profile_specs as catalog_default_profile_specs,
+    discover_custom_profile_specs as catalog_discover_custom_profile_specs,
+)
 
 
 RESULTS_DIR = get_path("results_dir")
 PROCESSED_DIR = get_path("processed_dir")
 FIGURES_DIR = get_path("figures_dir")
-DEFAULT_RESULT_PATH = RESULTS_DIR / "grid_stage_score_result.csv"
 DEFAULT_GEOJSON_PATH = PROCESSED_DIR / "candidate_grids.geojson"
-CUSTOM_PROFILES_DIR = RESULTS_DIR / "custom_profiles"
-
-PROFILE_ID_PATTERN = re.compile(r"^[a-z0-9_]+$")
-TEMPLATE_SYNERGY_FIELDS = {
-    "community_retail": "convenience_synergy_score",
-    "food_service": "light_food_synergy_score",
-}
 BASE_RESULT_FIELDS = [
     "grid_id",
     "district_name",
@@ -58,64 +57,26 @@ SCORE_COLORS = [
 ]
 
 
-@dataclass(frozen=True)
-class MapProfileSpec:
-    """Exact field mapping for one default or custom scoring profile."""
-
-    profile_id: str
-    profile_name: str
-    template_id: str
-    result_path: Path
-    static_html_path: Path | None
-    score_field: str
-    rank_field: str
-    district_rank_field: str
-    competition_score_field: str
-    advantage_field: str
-    risk_field: str
-    level_field: str
-    synergy_field: str
+MapProfileSpec = ResultProfileSpec
 
 
 def default_profile_specs(
     result_path: str | Path = DEFAULT_RESULT_PATH,
     figures_dir: str | Path = FIGURES_DIR,
+    metadata_path: str | Path | None = None,
 ) -> dict[str, MapProfileSpec]:
-    """Return exact Step 8 field mappings for the two default profiles."""
+    """Return shared Step 8 default profile specifications."""
     result = Path(result_path)
-    figures = Path(figures_dir)
-    return {
-        "convenience": MapProfileSpec(
-            profile_id="convenience",
-            profile_name="社区便利店",
-            template_id="community_retail",
-            result_path=result,
-            static_html_path=figures / "convenience_grid_map.html",
-            score_field="convenience_score",
-            rank_field="convenience_rank",
-            district_rank_field="convenience_district_rank",
-            competition_score_field="convenience_competition_score",
-            advantage_field="convenience_main_advantage",
-            risk_field="convenience_main_risk",
-            level_field="convenience_recommendation_level",
-            synergy_field="convenience_synergy_score",
-        ),
-        "light_food": MapProfileSpec(
-            profile_id="light_food",
-            profile_name="轻餐饮",
-            template_id="food_service",
-            result_path=result,
-            static_html_path=figures / "light_food_grid_map.html",
-            score_field="light_food_score",
-            rank_field="light_food_rank",
-            district_rank_field="light_food_district_rank",
-            competition_score_field="light_food_competition_score",
-            advantage_field="light_food_main_advantage",
-            risk_field="light_food_main_risk",
-            level_field="light_food_recommendation_level",
-            synergy_field="light_food_synergy_score",
-        ),
-    }
+    resolved_metadata = (
+        Path(metadata_path)
+        if metadata_path is not None
+        else result.parent / "profile_metadata.json"
+    )
+    return catalog_default_profile_specs(
+        result,
+        resolved_metadata,
+        figures_dir,
+    )
 
 
 def _require_columns(
@@ -187,65 +148,10 @@ def load_profile_result(spec: MapProfileSpec) -> pd.DataFrame:
 def discover_custom_profile_specs(
     custom_profiles_dir: str | Path = CUSTOM_PROFILES_DIR,
 ) -> dict[str, MapProfileSpec]:
-    """Discover valid Step 8 custom profiles from their result directories."""
-    base = Path(custom_profiles_dir)
-    if not base.exists():
-        return {}
-    specs: dict[str, MapProfileSpec] = {}
-    for profile_dir in sorted(path for path in base.iterdir() if path.is_dir()):
-        result_path = profile_dir / "grid_score_result.csv"
-        if not result_path.exists():
-            raise FileNotFoundError(f"自定义方案结果不存在：{result_path}")
-        metadata = pd.read_csv(
-            result_path,
-            usecols=lambda field: field in {
-                "profile_id",
-                "profile_name",
-                "template_id",
-            },
-        )
-        _require_columns(
-            metadata,
-            ["profile_id", "profile_name", "template_id"],
-            result_path,
-        )
-        unique_rows = metadata[
-            ["profile_id", "profile_name", "template_id"]
-        ].drop_duplicates()
-        if len(unique_rows) != 1:
-            raise ValueError(f"{result_path} 的方案元数据必须唯一")
-        row = unique_rows.iloc[0]
-        profile_id = str(row["profile_id"])
-        profile_name = str(row["profile_name"]).strip()
-        template_id = str(row["template_id"])
-        if profile_id != profile_dir.name:
-            raise ValueError(
-                f"自定义方案目录 {profile_dir.name} 与 profile_id {profile_id} 不一致"
-            )
-        if not PROFILE_ID_PATTERN.fullmatch(profile_id):
-            raise ValueError(f"自定义方案 profile_id 无效：{profile_id}")
-        if not profile_name:
-            raise ValueError(f"{result_path} 中 profile_name 不能为空")
-        if template_id not in TEMPLATE_SYNERGY_FIELDS:
-            raise ValueError(f"{result_path} 中 template_id 不受支持：{template_id}")
-
-        spec = MapProfileSpec(
-            profile_id=profile_id,
-            profile_name=profile_name,
-            template_id=template_id,
-            result_path=result_path,
-            static_html_path=None,
-            score_field="profile_score",
-            rank_field="profile_rank",
-            district_rank_field="district_profile_rank",
-            competition_score_field="profile_competition_score",
-            advantage_field="profile_main_advantage",
-            risk_field="profile_main_risk",
-            level_field="profile_recommendation_level",
-            synergy_field=TEMPLATE_SYNERGY_FIELDS[template_id],
-        )
+    """Discover shared Step 8 custom profile specifications."""
+    specs = catalog_discover_custom_profile_specs(custom_profiles_dir)
+    for spec in specs.values():
         load_profile_result(spec)
-        specs[profile_id] = spec
     return specs
 
 
@@ -253,16 +159,24 @@ def available_profile_specs(
     result_path: str | Path = DEFAULT_RESULT_PATH,
     figures_dir: str | Path = FIGURES_DIR,
     custom_profiles_dir: str | Path = CUSTOM_PROFILES_DIR,
+    metadata_path: str | Path | None = None,
 ) -> dict[str, MapProfileSpec]:
-    """Return user-facing labels mapped to default and custom profiles."""
-    defaults = default_profile_specs(result_path, figures_dir)
-    result = {
-        "默认｜社区便利店": defaults["convenience"],
-        "默认｜轻餐饮": defaults["light_food"],
-    }
-    for spec in discover_custom_profile_specs(custom_profiles_dir).values():
-        result[f"自定义｜{spec.profile_name} ({spec.profile_id})"] = spec
-    return result
+    """Return shared user-facing default and custom profile options."""
+    result = Path(result_path)
+    resolved_metadata = (
+        Path(metadata_path)
+        if metadata_path is not None
+        else result.parent / "profile_metadata.json"
+    )
+    specs = catalog_available_profile_specs(
+        result,
+        resolved_metadata,
+        figures_dir,
+        custom_profiles_dir,
+    )
+    for spec in specs.values():
+        load_profile_result(spec)
+    return specs
 
 
 def _out_of_china(lon: float, lat: float) -> bool:

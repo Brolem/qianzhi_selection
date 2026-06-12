@@ -16,6 +16,17 @@ class ConfigHelperTests(unittest.TestCase):
         self.assertEqual(cfg["project"]["optional_radius_m"], [500, 800, 1000])
         self.assertEqual(cfg["target_districts"]["first_version"], ["云岩区", "南明区", "观山湖区"])
         self.assertEqual(cfg["target_districts"]["optional_enhancement"], ["花溪区", "白云区"])
+        self.assertEqual(
+            cfg["llm"],
+            {
+                "provider": "deepseek",
+                "base_url": "https://api.deepseek.com",
+                "primary_model": "deepseek-v4-pro",
+                "fallback_model": "deepseek-v4-flash",
+                "timeout_seconds": 60,
+                "primary_max_retries": 1,
+            },
+        )
 
         for key in [
             "official_raw_dir",
