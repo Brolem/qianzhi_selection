@@ -30,9 +30,13 @@ class WorkbenchUiTests(unittest.TestCase):
         self.assertIn("#F3F5F8", WORKBENCH_CSS)
         self.assertIn("#FFFFFF", WORKBENCH_CSS)
         self.assertIn("padding-top: 4rem", WORKBENCH_CSS)
+        self.assertIn("justify-content: center", WORKBENCH_CSS)
+        self.assertIn("min-height: 64px", WORKBENCH_CSS)
+        self.assertIn("font-size: 24px", WORKBENCH_CSS)
         self.assertIn("@media (max-width: 900px)", WORKBENCH_CSS)
         self.assertIn("flex: 1 1 100% !important", WORKBENCH_CSS)
         self.assertIn("@media (max-width: 600px)", WORKBENCH_CSS)
+        self.assertIn("font-size: 16px", WORKBENCH_CSS)
 
     def test_theme_has_no_external_assets_gradients_or_javascript(self):
         lowered = WORKBENCH_CSS.lower()

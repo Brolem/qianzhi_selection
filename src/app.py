@@ -26,7 +26,6 @@ from src.pages import (  # noqa: E402
     overview,
     project_notes,
     report_center,
-    site_analysis,
 )
 from src.pages.map_insight import render_map_page  # noqa: E402
 from src.pages.report_center import render_report_page  # noqa: E402
@@ -49,7 +48,6 @@ class PageRegistration:
 PAGE_REGISTRATIONS = [
     PageRegistration("项目总览", "overview", overview.render, default=True),
     PageRegistration("数据底座", "data-foundation", data_foundation.render),
-    PageRegistration("选址分析", "site-analysis", site_analysis.render),
     PageRegistration("区域对比", "district-compare", district_compare.render),
     PageRegistration(
         "网格推荐",

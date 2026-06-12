@@ -272,13 +272,12 @@ def make_report_spec(result_path: Path) -> MapProfileSpec:
 
 
 class AppHelperTests(unittest.TestCase):
-    def test_page_registrations_define_eight_workbench_pages_in_order(self):
+    def test_page_registrations_define_seven_workbench_pages_in_order(self):
         self.assertEqual(
             [page.title for page in PAGE_REGISTRATIONS],
             [
                 "项目总览",
                 "数据底座",
-                "选址分析",
                 "区域对比",
                 "网格推荐",
                 "地图洞察",
@@ -291,7 +290,6 @@ class AppHelperTests(unittest.TestCase):
             [
                 "overview",
                 "data-foundation",
-                "site-analysis",
                 "district-compare",
                 "grid-recommendation",
                 "map-insight",
@@ -310,7 +308,7 @@ class AppHelperTests(unittest.TestCase):
 
         run_navigation(st)
 
-        self.assertEqual(len(st.created_pages), 8)
+        self.assertEqual(len(st.created_pages), 7)
         self.assertEqual(st.created_pages[0].title, "项目总览")
         self.assertTrue(st.created_pages[0].default)
         self.assertEqual(st.navigation_calls[0]["position"], "sidebar")

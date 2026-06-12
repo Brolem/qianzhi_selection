@@ -88,14 +88,16 @@ WORKBENCH_CSS = """
 .workbench-brand-bar {
   display: flex;
   align-items: center;
-  min-height: 52px;
+  justify-content: center;
+  min-height: 64px;
   padding: 0 20px;
   margin: 0 0 18px;
   color: #FFFFFF;
   background: var(--workbench-navy);
   border-left: 4px solid var(--workbench-blue);
   border-radius: 6px;
-  font-size: 18px;
+  font-size: 24px;
+  text-align: center;
   font-weight: 700;
   line-height: 1.4;
 }
@@ -230,9 +232,10 @@ WORKBENCH_CSS = """
 
 @media (max-width: 600px) {
   .workbench-brand-bar {
-    min-height: 48px;
-    padding: 10px 14px;
+    min-height: 54px;
+    padding: 6px 10px;
     font-size: 16px;
+    line-height: 1.25;
   }
 
   .workbench-page-header h1 {

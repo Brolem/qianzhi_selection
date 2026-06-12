@@ -149,7 +149,7 @@
 | Step 10 | 报告生成模块 | 输出 Markdown 选址报告 | 强烈建议 |
 | Step 11 | Streamlit 多页架构 | 改造成工作台入口 | 必须 |
 | Step 12 | 前端视觉样式 | 仿百度慧眼平台风格 | 强烈建议 |
-| Step 13 | 选址分析主页面 | 完成核心交互页面 | 必须 |
+| Step 13 | 选址决策流程整合 | 去除重复入口，能力并入 Step 15 | 必须 |
 | Step 14 | 区域对比页面 | 做区县背景对比 | 建议 |
 | Step 15 | 网格推荐页面 | 展示核心推荐结果 | 必须 |
 | Step 16 | 地图洞察页面 | 展示推荐地图 | 强烈建议 |
@@ -965,29 +965,26 @@ python -m src.reporting.report_generator --profile convenience --grid-id grid_52
 页面结构：
 1. 项目总览
 2. 数据底座
-3. 选址分析
-4. 区域对比
-5. 网格推荐
-6. 地图洞察
-7. 智能报告
-8. 项目说明
+3. 区域对比
+4. 网格推荐
+5. 地图洞察
+6. 智能报告
+7. 项目说明
 
 建议目录：
 src/app.py 作为入口；
 src/pages/
   01_overview.py
   02_data_foundation.py
-  03_site_analysis.py
-  04_district_compare.py
-  05_grid_recommendation.py
-  06_map_insight.py
-  07_report_center.py
-  08_project_notes.py
+  district_compare.py
+  grid_recommendation.py
+  map_insight.py
+  report_center.py
+  project_notes.py
 
 若不想拆文件，也可以先在 app.py 中用函数组织：
 render_overview()
 render_data_foundation()
-render_site_analysis()
 ...
 
 禁止：
@@ -999,10 +996,10 @@ render_site_analysis()
 ### 当前实际实施
 
 - 当前 Streamlit 版本为 `1.58.0`，正式入口使用 `st.Page` 和 `st.navigation`，并保留 sidebar radio 回退。
-- `src/app.py` 只负责宽屏配置、八页注册和导航；原入口保留为 `src/app_legacy.py`。
+- Step 11 最初建立八页结构；Step 13–15 实施时删除职责重复的独立“选址分析”页，当前 `src/app.py` 负责宽屏配置、七页注册和导航；原入口保留为 `src/app_legacy.py`。
 - 页面模块实际位于 `src/pages/`，文件名采用无数字前缀的 Python 模块名，并通过稳定的页面注册顺序控制导航。
-- “选址分析”“网格推荐”“地图洞察”和“智能报告”使用各页面独立评分方案选择器，不保留全局固定业态侧栏。
-- 项目总览、数据底座、选址分析、区域对比和网格推荐只提供真实 v2 输出的最小只读内容；视觉样式与完整交互仍按 Step 12–17 分步实施。
+- “网格推荐”“地图洞察”和“智能报告”使用各页面独立评分方案选择器，不保留全局固定业态侧栏。
+- 项目总览增加真实 POI 和得分图表；区域对比展示原始 POI 分组统计；网格推荐统一承载自定义权重和即时评分。
 - 地图和报告页面迁移后继续兼容 Step 9–10 的默认、自定义方案、静态回退、会话缓存和模板报告行为。
 
 ### 验收命令
@@ -1010,16 +1007,6 @@ render_site_analysis()
 ```bash
 streamlit run src/app.py
 ```
-
-### 当前实施状态（2026-06-12）
-
-- 实际共享视觉模块为 `src/ui/workbench.py`，主题配置为 `.streamlit/config.toml`。
-- `src/app.py` 在运行八页导航前统一加载主题和标题栏，未隐藏 Streamlit 原生工具栏。
-- 首页四项主指标读取真实数据与配置，当前为 3 个目标区县、790 个空间评价网格、15 类 POI 和 41 个活跃推荐网格；60 个采样网格和 3 套有效评分方案作为辅助信息展示。
-- “选址分析”显示四步静态流程，当前突出第三步；参数区与 Top 5 结果区分栏。
-- “网格推荐”“地图洞察”“智能报告”分别采用参数与结果分区；智能报告保持按钮触发，不在页面加载时调用模型。
-- 响应式样式使用 900px 和 600px 两个断点，不依赖外部 CDN、外部字体、JavaScript 或复杂前端框架。
-- 本步只调整视觉和布局，Step 13–17 的完整交互、图表和页面联动仍按后续步骤实施。
 
 ---
 
@@ -1056,7 +1043,7 @@ streamlit run src/app.py
    展示已接入区县数、候选网格数、POI 类别数、推荐结果数。
 
 7. 步骤式流程卡：
-   在“选址分析”页使用：
+   决策流程整合到“网格推荐”页：
    Step 1 选择应用场景
    Step 2 设置分析参数
    Step 3 查看推荐结果
@@ -1073,6 +1060,17 @@ streamlit run src/app.py
 - 不要破坏 Streamlit 运行。
 ```
 
+### 当前实施状态
+
+- 实际共享视觉模块为 `src/ui/workbench.py`，主题配置为 `.streamlit/config.toml`。
+- `src/app.py` 在运行七页导航前统一加载主题和标题栏，未隐藏 Streamlit 原生工具栏。
+- 首页四项主指标读取真实数据与配置，当前为 3 个目标区县、790 个空间评价网格、15 类 POI 和 41 个活跃推荐网格；60 个采样网格和 3 套有效评分方案作为辅助信息展示。
+- 标题栏桌面端居中显示并使用 24px 字号，窄屏下固定缩小字号和间距。
+- “网格推荐”“地图洞察”“智能报告”分别采用参数与结果分区；智能报告保持按钮触发，不在页面加载时调用模型。
+- 响应式样式使用 900px 和 600px 两个断点，不依赖外部 CDN、外部字体、JavaScript 或复杂前端框架。
+- Step 13–15 已在该视觉基础上完成页面去重、首页和区域图表、自定义权重、即时评分及推荐结果整合。
+
+
 ### 验收命令
 
 ```bash
@@ -1081,61 +1079,29 @@ streamlit run src/app.py
 
 ---
 
-## Step 13：实现“选址分析”主页面
+## Step 13：选址决策流程整合
 
 ### 目标
 
-做出最像百度慧眼截图的核心页面。
+消除“选址分析”和“网格推荐”的职责重复，将核心决策能力集中到 Step 15。
 
 ### 给 Codex 的指令
 
 ```text
-任务 13：实现“选址分析”主页面。
-
-页面结构：
-
-Step 1：选择应用场景
-使用卡片按钮：
-- 智能推荐
-- 区域评估
-- 单点评估
-
-其中第一版必须实现“智能推荐”；
-区域评估和单点评估可以先做页面占位，但不要写假功能。
-
-Step 2：设置分析参数
-表单字段：
-- 业态：便利店 / 轻餐饮
-- 目标区县：云岩区 / 南明区 / 观山湖区 / 花溪区 / 白云区 / 全部
-- 网格大小：1km，只读显示
-- POI 半径：500m / 800m / 1000m
-- 权重方案：默认便利店 / 默认轻餐饮 / 自定义
-
-Step 3：查看推荐结果
-左侧：
-- 推荐网格 Top 10 表格
-右侧：
-- 地图展示
-下方：
-- 指标分解图
-
-Step 4：生成报告
-- 选择 grid_id
-- 点击生成报告
-- 展示 Markdown 报告
-- 支持下载 Markdown
+任务 13：选址决策流程整合。
 
 要求：
-- 所有数据从 outputs/results/grid_stage_score_result.csv 读取；
-- 如果文件不存在，提示先运行：
-  python src/scoring_model.py
-- 不要在页面中虚构结果。
+1. 删除独立“选址分析”页面和导航项。
+2. 默认方案、自定义权重、推荐结果和指标分解并入 Step 15。
+3. 地图和报告保留独立页面，不在网格推荐中重复嵌入。
+4. 保留 Step 编号，记录页面去重原因和真实实施结果。
 ```
 
 ### 验收重点
 
 ```text
-选择业态 → 选择区县 → 出 Top 10 → 看地图 → 生成报告
+七页导航中不存在重复的“选址分析”入口；
+网格推荐是评分参数与推荐结果的唯一主入口。
 ```
 
 ---
@@ -1180,6 +1146,12 @@ Step 4：生成报告
 - 不要以区县平均分替代网格级推荐。
 ```
 
+### 当前实际实施
+
+- 保留三区汇总表。
+- 根据 `data/processed/grid_poi_counts.csv` 聚合并展示三组原始 POI 数量。
+- 图表使用 Altair，所有数量保持原始统计口径，不把区县平均分写成最终推荐结论。
+
 ---
 
 ## Step 15：实现“网格推荐”页面
@@ -1194,53 +1166,54 @@ Step 4：生成报告
 任务 15：实现“网格推荐”页面。
 
 输入：
+- data/processed/grid_scoring_input.csv
 - outputs/results/grid_stage_score_result.csv
+- outputs/results/custom_profiles/<profile_id>/
 
 页面必须包含：
 
-1. 全局便利店 Top 10
-字段：
-- grid_id
-- district_name
-- convenience_score
-- traffic_accessibility
-- consumption_potential
-- synergy_score
-- competition_pressure
-- main_advantage
-- main_risk
+1. 方案来源：
+- 默认社区便利店
+- 默认轻餐饮
+- 已保存自定义方案
+- 新建自定义方案
 
-2. 全局轻餐饮 Top 10
-字段：
-- grid_id
-- district_name
-- light_food_score
-- traffic_accessibility
-- employment_customer_proxy
-- synergy_score
-- competition_pressure
-- main_advantage
-- main_risk
+2. 新建方案：
+- 明确选择 community_retail 或 food_service 指标模板
+- 六项百分比数字输入，范围 0-100
+- 显示已分配和剩余权重
+- 提供便利店、轻餐饮、平均分配、重置和一键归一
 
-3. 各区县 Top 5
-用户选择区县后展示：
-- 便利店 Top 5
-- 轻餐饮 Top 5
+3. 即时评分：
+- 六项全零时禁止计算
+- 非零且合计不为 100.00% 时使用归一权重预览
+- 直接调用 score_profile()，不启动子进程
+- 41 个活跃网格参与排名，19 个无活动网格不进入推荐名单
 
-4. 指标分解
-用户选择一个 grid_id 后，展示雷达图或横向条形图：
-- traffic_accessibility
-- consumption_potential
-- employment_customer_proxy
-- synergy_score
-- competition_pressure
-- business_atmosphere
+4. 推荐结果：
+- 全局 Top 10
+- 用户选择区县后的 Top 5
+- 六维正向指标、主要优势、主要风险和推荐等级
+- 竞争维度显示 100 - competition_pressure 的低竞争得分
+
+5. 正式保存：
+- profile_id 只允许小写字母、数字和下划线
+- 中文方案名称非空
+- 输入合计必须精确为 100.00%
+- 已存在标识不得覆盖
+- 写出评分结果、区县汇总、推荐摘要和方案元数据四个文件
 
 禁止：
 - 不要只展示总分；
 - 必须展示优势和风险；
 - 不要写门牌号推荐。
 ```
+
+### 当前实际实施
+
+- 页面直接构造 `ScoringProfile` 并调用 `score_profile()` 完成内存预览。
+- 百分之一最大余数法保证归一结果恰好为 100.00%，相同输入重复执行结果一致。
+- 正式方案调用现有四文件事务；保存成功后地图和智能报告页面可通过共享方案目录发现。
 
 ---
 
@@ -1411,9 +1384,9 @@ streamlit run src/app.py
 打开 Streamlit
 → 项目总览
 → 数据底座说明
-→ 进入选址分析
-→ 选择智能推荐
-→ 选择便利店/轻餐饮
+→ 进入网格推荐
+→ 选择默认方案、已保存方案或新建自定义方案
+→ 必要时设置六项权重和指标模板
 → 选择云岩/南明/观山湖或全部
 → 查看 Top 10 推荐网格
 → 打开地图洞察
@@ -1464,9 +1437,9 @@ streamlit run src/app.py
 
 | 优先级 | 内容 |
 |---|---|
-| P0 | 配置文件、高德 API demo 模式、网格生成、POI 统计、评分结果、Streamlit 选址分析页 |
+| P0 | 配置文件、高德 API demo 模式、网格生成、POI 统计、评分结果、Streamlit 网格推荐页、自定义权重 |
 | P1 | 地图洞察、智能报告、区域对比、视觉样式 |
-| P2 | 自定义权重、单点评估、报告导出 Word/PDF |
+| P2 | 单点评估、报告导出 Word/PDF |
 | P3 | 百度/腾讯 POI 备选、多源 POI 融合、H3 六边形、Location-Allocation 优化 |
 
 最小可交付版本必须包含：
