@@ -9,6 +9,7 @@ import math
 import os
 import sys
 import tempfile
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -19,7 +20,7 @@ import pandas as pd
 if __package__ in {None, ""}:
     sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
-from src.config import get_path
+from src.config import get_amap_map_config, get_path
 from src.profile_catalog import (
     CUSTOM_PROFILES_DIR,
     DEFAULT_METADATA_PATH,
@@ -55,9 +56,46 @@ SCORE_COLORS = [
     (80.0, "#5FA27C"),
     (math.inf, "#176B4A"),
 ]
+_USE_ENV_CREDENTIALS = object()
 
 
 MapProfileSpec = ResultProfileSpec
+
+
+@dataclass(frozen=True)
+class AmapJsCredentials:
+    """Browser-side credentials for Amap JavaScript API 2.0."""
+
+    api_key: str
+    security_code: str
+
+
+def load_amap_js_credentials(
+    api_key: str | None = None,
+    security_code: str | None = None,
+) -> AmapJsCredentials | None:
+    """Read the Amap JS credential pair without exposing their values."""
+    resolved_key = (
+        api_key if api_key is not None else os.getenv("AMAP_JS_KEY", "")
+    ).strip()
+    resolved_code = (
+        security_code
+        if security_code is not None
+        else os.getenv("AMAP_JS_SECURITY_CODE", "")
+    ).strip()
+    if not resolved_key and not resolved_code:
+        return None
+    missing = []
+    if not resolved_key:
+        missing.append("AMAP_JS_KEY")
+    if not resolved_code:
+        missing.append("AMAP_JS_SECURITY_CODE")
+    if missing:
+        raise ValueError("高德 JS API 环境变量缺失：" + "、".join(missing))
+    return AmapJsCredentials(
+        api_key=resolved_key,
+        security_code=resolved_code,
+    )
 
 
 def default_profile_specs(
@@ -339,6 +377,13 @@ def _map_center(frame: pd.DataFrame) -> list[float]:
     ]
 
 
+def _map_center_gcj02(frame: pd.DataFrame) -> list[float]:
+    return [
+        float(frame["centroid_lon"].mean()),
+        float(frame["centroid_lat"].mean()),
+    ]
+
+
 def _detail_values(
     row: pd.Series | None,
     spec: MapProfileSpec,
@@ -476,6 +521,323 @@ def _enrich_geojson(
     return result, counts
 
 
+def _top_marker_payload(
+    frame: pd.DataFrame,
+    spec: MapProfileSpec,
+    top_n: int,
+) -> list[dict[str, Any]]:
+    ranks = pd.to_numeric(frame[spec.rank_field], errors="coerce")
+    top = frame.loc[
+        frame["has_poi_activity"].astype(bool)
+        & ranks.notna()
+        & ranks.le(top_n)
+    ].copy()
+    top["_map_rank"] = ranks.loc[top.index].astype(int)
+    top = top.sort_values("_map_rank")
+    return [
+        {
+            "grid_id": str(row["grid_id"]),
+            "rank": int(row["_map_rank"]),
+            "position": [
+                float(row["centroid_lon"]),
+                float(row["centroid_lat"]),
+            ],
+        }
+        for _, row in top.iterrows()
+    ]
+
+
+def _enrich_geojson_gcj02(
+    geojson: dict[str, Any],
+    frame: pd.DataFrame,
+    spec: MapProfileSpec,
+    top_n: int,
+) -> tuple[dict[str, Any], dict[str, int]]:
+    if geojson.get("coord_system") != "GCJ-02":
+        raise ValueError("高德地图 GeoJSON coord_system 必须为 GCJ-02")
+    rows = {
+        str(row["grid_id"]): row
+        for _, row in frame.iterrows()
+    }
+    geojson_ids = {
+        str(feature["properties"]["grid_id"])
+        for feature in geojson["features"]
+    }
+    missing = sorted(set(rows) - geojson_ids)
+    if missing:
+        raise ValueError("评分网格缺少 GeoJSON 面：" + ", ".join(missing))
+
+    result = copy.deepcopy(geojson)
+    counts = {"uncollected": 0, "inactive": 0, "active": 0, "top": 0}
+    for feature in result["features"]:
+        properties = feature["properties"]
+        grid_id = str(properties["grid_id"])
+        row = rows.get(grid_id)
+        if row is None:
+            status = "未采集"
+            fill_color = UNSAMPLED_FILL
+            border_color = "#C8D0CD"
+            border_weight = 1
+            fill_opacity = 0.38
+            counts["uncollected"] += 1
+        elif not bool(row["has_poi_activity"]):
+            status = "无POI活动"
+            fill_color = INACTIVE_FILL
+            border_color = "#7D8984"
+            border_weight = 1
+            fill_opacity = 0.58
+            counts["inactive"] += 1
+        else:
+            status = "已评分"
+            fill_color = score_color(float(row[spec.score_field]))
+            rank = pd.to_numeric(
+                pd.Series([row[spec.rank_field]]),
+                errors="coerce",
+            ).iloc[0]
+            is_top = not pd.isna(rank) and int(rank) <= top_n
+            border_color = "#112F25" if is_top else "#FFFFFF"
+            border_weight = 3 if is_top else 1
+            fill_opacity = 0.78
+            counts["active"] += 1
+            if is_top:
+                counts["top"] += 1
+        properties.update(_detail_values(row, spec, status))
+        properties["fill_color"] = fill_color
+        properties["border_color"] = border_color
+        properties["border_weight"] = border_weight
+        properties["fill_opacity"] = fill_opacity
+    return result, counts
+
+
+def prepare_amap_payload(
+    spec: MapProfileSpec,
+    *,
+    geojson_path: str | Path = DEFAULT_GEOJSON_PATH,
+    top_n: int = 10,
+) -> dict[str, Any]:
+    """Prepare one GCJ-02 payload shared by Amap HTML rendering."""
+    if top_n < 1:
+        raise ValueError("top_n 必须大于 0")
+    frame = load_profile_result(spec)
+    top_markers = _top_marker_payload(frame, spec, top_n)
+    geojson_file = Path(geojson_path)
+    if geojson_file.exists():
+        geojson = _load_geojson(geojson_file)
+        enriched, counts = _enrich_geojson_gcj02(
+            geojson,
+            frame,
+            spec,
+            top_n,
+        )
+        return {
+            "coord_system": "GCJ-02",
+            "mode": "polygons",
+            "profile_name": spec.profile_name,
+            "center": _map_center_gcj02(frame),
+            "geojson": enriched,
+            "points": [],
+            "top_markers": top_markers,
+            "status_counts": counts,
+        }
+
+    points = []
+    for _, row in frame.iterrows():
+        active = bool(row["has_poi_activity"])
+        status = "已评分" if active else "无POI活动"
+        details = _detail_values(row, spec, status)
+        points.append(
+            {
+                "grid_id": str(row["grid_id"]),
+                "district_name": str(row["district_name"]),
+                "position": [
+                    float(row["centroid_lon"]),
+                    float(row["centroid_lat"]),
+                ],
+                "fill_color": (
+                    score_color(float(row[spec.score_field]))
+                    if active
+                    else INACTIVE_FILL
+                ),
+                **details,
+            }
+        )
+    return {
+        "coord_system": "GCJ-02",
+        "mode": "points",
+        "profile_name": spec.profile_name,
+        "center": _map_center_gcj02(frame),
+        "geojson": None,
+        "points": points,
+        "top_markers": top_markers,
+        "status_counts": {
+            "active": int(frame["has_poi_activity"].sum()),
+            "inactive": int((~frame["has_poi_activity"]).sum()),
+            "top": len(top_markers),
+        },
+    }
+
+
+def _safe_script_json(value: Any) -> str:
+    return json.dumps(
+        value,
+        ensure_ascii=False,
+        separators=(",", ":"),
+    ).replace("</", "<\\/")
+
+
+def build_amap_map_html(
+    spec: MapProfileSpec,
+    *,
+    credentials: AmapJsCredentials,
+    geojson_path: str | Path = DEFAULT_GEOJSON_PATH,
+    map_config: dict[str, Any] | None = None,
+) -> str:
+    """Build a self-contained Amap JS API 2.0 document using GCJ-02."""
+    if not isinstance(credentials, AmapJsCredentials):
+        raise TypeError("credentials 必须为 AmapJsCredentials")
+    settings = map_config or get_amap_map_config()
+    payload = prepare_amap_payload(
+        spec,
+        geojson_path=geojson_path,
+        top_n=int(settings["top_n"]),
+    )
+    replacements = {
+        "__API_KEY__": _safe_script_json(credentials.api_key),
+        "__SECURITY_CODE__": _safe_script_json(credentials.security_code),
+        "__API_VERSION__": _safe_script_json(str(settings["js_api_version"])),
+        "__MAP_STYLE__": _safe_script_json(str(settings["map_style"])),
+        "__DEFAULT_ZOOM__": str(int(settings["default_zoom"])),
+        "__MAP_HEIGHT__": str(int(settings["height"])),
+        "__MAP_PAYLOAD__": _safe_script_json(payload),
+        "__PROFILE_NAME__": html.escape(spec.profile_name),
+        "__UNSAMPLED_FILL__": UNSAMPLED_FILL,
+        "__INACTIVE_FILL__": INACTIVE_FILL,
+    }
+    document = """<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>黔址优选地图</title>
+  <style>
+    html,body,#map{width:100%;height:100%;margin:0;background:#f3f5f8}
+    body{height:__MAP_HEIGHT__px;font-family:"Microsoft YaHei",Arial,sans-serif}
+    .map-legend{position:absolute;left:18px;bottom:20px;z-index:20;
+      padding:10px 12px;background:#fff;border:1px solid #cbd3cf;
+      box-shadow:0 2px 8px rgba(0,0,0,.16);font-size:12px;line-height:1.75}
+    .map-legend span{display:inline-block;width:13px;height:10px;
+      margin-right:6px;border:1px solid #aeb7b3}
+    .legend-top-rank{display:inline-flex;width:17px;height:17px;margin-right:6px;
+      align-items:center;justify-content:center;box-sizing:border-box;
+      border:2px solid #112f25;border-radius:50%;background:#fff;color:#112f25;
+      font-size:10px;font-weight:800;line-height:1;vertical-align:middle}
+    .map-popup{min-width:230px;padding:10px 12px;background:#fff;
+      border:1px solid #d7dedb;box-shadow:0 2px 10px rgba(0,0,0,.18);
+      color:#172033;font-size:12px;line-height:1.65}
+    .map-popup strong{font-size:13px}
+    .top-rank-badge{width:25px;height:25px;border-radius:50%;background:#fff;
+      border:3px solid #112f25;color:#112f25;font-weight:800;text-align:center;
+      line-height:19px;box-shadow:0 2px 5px rgba(0,0,0,.4)}
+    .map-error{display:none;position:absolute;inset:16px;z-index:30;
+      align-items:center;justify-content:center;padding:20px;background:#fff;
+      border:1px solid #d7dedb;color:#7a271a;text-align:center}
+  </style>
+  <script>
+    window._AMapSecurityConfig={securityJsCode:__SECURITY_CODE__};
+  </script>
+  <script src="https://webapi.amap.com/loader.js"></script>
+</head>
+<body>
+  <div id="map"></div>
+  <div class="map-legend">
+    <strong>__PROFILE_NAME__评分图例</strong>
+    <div><span style="background:#B34A42"></span>0-20</div>
+    <div><span style="background:#D98252"></span>20-40</div>
+    <div><span style="background:#E8B96B"></span>40-60</div>
+    <div><span style="background:__INACTIVE_FILL__"></span>无 POI 活动</div>
+    <div><span style="background:__UNSAMPLED_FILL__"></span>未采集网格</div>
+    <div><b class="legend-top-rank">1</b>全局 Top 10</div>
+    <div>坐标：GCJ-02</div>
+  </div>
+  <div id="map-error" class="map-error">
+    高德地图加载失败，请检查 Web端(JS API) Key、安全密钥、域名白名单或网络连接。
+  </div>
+  <script>
+    const API_KEY=__API_KEY__;
+    const PAYLOAD=__MAP_PAYLOAD__;
+    const escapeHtml=(value)=>String(value??"—")
+      .replaceAll("&","&amp;").replaceAll("<","&lt;")
+      .replaceAll(">","&gt;").replaceAll('"',"&quot;")
+      .replaceAll("'","&#39;");
+    const summaryHtml=(p)=>`<div class="map-popup"><strong>${escapeHtml(p.grid_id)}</strong><br>
+      区县：${escapeHtml(p.district_name)}<br>数据状态：${escapeHtml(p.map_status)}<br>
+      评分：${escapeHtml(p.map_score)}<br>全局排名：${escapeHtml(p.map_rank)}<br>
+      主要优势：${escapeHtml(p.map_advantage)}</div>`;
+    const detailHtml=(p)=>`<div class="map-popup"><strong>${escapeHtml(p.grid_id)}</strong><br>
+      推荐等级：${escapeHtml(p.map_level)}<br>交通可达性：${escapeHtml(p.metric_traffic)}<br>
+      消费潜力：${escapeHtml(p.metric_consumption)}<br>
+      就业客群代理：${escapeHtml(p.metric_employment)}<br>
+      共生业态：${escapeHtml(p.metric_synergy)}<br>
+      低竞争得分：${escapeHtml(p.metric_competition)}<br>
+      商业氛围：${escapeHtml(p.metric_atmosphere)}<br>
+      主要风险：${escapeHtml(p.map_risk)}</div>`;
+    AMapLoader.load({key:API_KEY,version:__API_VERSION__,plugins:[]}).then((AMap)=>{
+      const map=new AMap.Map("map",{zoom:__DEFAULT_ZOOM__,center:PAYLOAD.center,
+        mapStyle:__MAP_STYLE__,viewMode:"2D"});
+      const hoverInfo=new AMap.InfoWindow({isCustom:true,offset:new AMap.Pixel(0,-10)});
+      const detailInfo=new AMap.InfoWindow({isCustom:true,offset:new AMap.Pixel(0,-10)});
+      const bindOverlay=(overlay,properties)=>{
+        overlay.on("mouseover",(event)=>{
+          hoverInfo.setContent(summaryHtml(properties));
+          hoverInfo.open(map,event.lnglat);
+        });
+        overlay.on("mouseout",()=>hoverInfo.close());
+        overlay.on("click",(event)=>{
+          hoverInfo.close();
+          detailInfo.setContent(detailHtml(properties));
+          detailInfo.open(map,event.lnglat);
+        });
+      };
+      if(PAYLOAD.mode==="polygons"){
+        PAYLOAD.geojson.features.forEach((feature)=>{
+          const geometry=feature.geometry;
+          const groups=geometry.type==="Polygon"
+            ? [geometry.coordinates] : geometry.coordinates;
+          groups.forEach((path)=>{
+            const polygon=new AMap.Polygon({path,strokeColor:feature.properties.border_color,
+              strokeWeight:feature.properties.border_weight,
+              fillColor:feature.properties.fill_color,
+              fillOpacity:feature.properties.fill_opacity,
+              cursor:"pointer",zIndex:feature.properties.border_weight>1?15:10});
+            map.add(polygon);
+            bindOverlay(polygon,feature.properties);
+          });
+        });
+      }else{
+        PAYLOAD.points.forEach((point)=>{
+          const marker=new AMap.CircleMarker({center:point.position,radius:7,
+            strokeColor:"#FFFFFF",strokeWeight:1,fillColor:point.fill_color,
+            fillOpacity:.82,zIndex:10});
+          map.add(marker);
+          bindOverlay(marker,point);
+        });
+      }
+      PAYLOAD.top_markers.forEach((item)=>{
+        map.add(new AMap.Marker({position:item.position,
+          content:`<div class="top-rank-badge">${item.rank}</div>`,
+          offset:new AMap.Pixel(-12,-12),zIndex:30}));
+      });
+    }).catch(()=>{
+      document.getElementById("map-error").style.display="flex";
+    });
+  </script>
+</body>
+</html>"""
+    for token, value in replacements.items():
+        document = document.replace(token, value)
+    return document
+
+
 def _legend_html(profile_name: str, include_uncollected: bool) -> str:
     uncollected = (
         f'<div><span style="background:{UNSAMPLED_FILL}"></span>未采集网格</div>'
@@ -490,16 +852,17 @@ line-height:1.75;box-shadow:0 2px 8px rgba(0,0,0,.18);">
   <div><span style="background:#B34A42"></span>0-20</div>
   <div><span style="background:#D98252"></span>20-40</div>
   <div><span style="background:#E8B96B"></span>40-60</div>
-  <div><span style="background:#5FA27C"></span>60-80</div>
-  <div><span style="background:#176B4A"></span>80-100</div>
   <div><span style="background:{INACTIVE_FILL}"></span>无 POI 活动</div>
   {uncollected}
-  <div><b style="display:inline-block;width:13px;border:2px solid #112F25;
-  margin-right:6px;">&nbsp;</b>全局 Top 10</div>
+  <div><b class="legend-top-rank">1</b>全局 Top 10</div>
 </div>
 <style>
 .map-legend span {{display:inline-block;width:13px;height:10px;margin-right:6px;
 border:1px solid #aeb7b3;}}
+.legend-top-rank {{display:inline-flex;width:17px;height:17px;margin-right:6px;
+align-items:center;justify-content:center;box-sizing:border-box;
+border:2px solid #112F25;border-radius:50%;background:#fff;color:#112F25;
+font-size:10px;font-weight:800;line-height:1;vertical-align:middle;}}
 .top-rank-badge {{width:25px;height:25px;border-radius:50%;background:#fff;
 border:3px solid #112F25;color:#112F25;font-weight:800;text-align:center;
 line-height:19px;box-shadow:0 2px 5px rgba(0,0,0,.4);pointer-events:none;}}
@@ -758,24 +1121,53 @@ def write_default_maps(
     result_path: str | Path = DEFAULT_RESULT_PATH,
     geojson_path: str | Path = DEFAULT_GEOJSON_PATH,
     output_dir: str | Path = FIGURES_DIR,
+    credentials: AmapJsCredentials | None | object = _USE_ENV_CREDENTIALS,
+    map_config: dict[str, Any] | None = None,
 ) -> list[Path]:
     """Generate and atomically replace both default profile HTML maps."""
     output = Path(output_dir)
     specs = default_profile_specs(result_path, output)
+    resolved_credentials = (
+        load_amap_js_credentials()
+        if credentials is _USE_ENV_CREDENTIALS
+        else credentials
+    )
+    if resolved_credentials is not None and not isinstance(
+        resolved_credentials,
+        AmapJsCredentials,
+    ):
+        raise TypeError("credentials 必须为 AmapJsCredentials 或 None")
     targets = [
         output / "convenience_grid_map.html",
         output / "light_food_grid_map.html",
     ]
-    html_contents = [
-        build_profile_map(
-            specs["convenience"],
-            geojson_path=geojson_path,
-        ).get_root().render(),
-        build_profile_map(
-            specs["light_food"],
-            geojson_path=geojson_path,
-        ).get_root().render(),
-    ]
+    if resolved_credentials is None:
+        html_contents = [
+            build_profile_map(
+                specs["convenience"],
+                geojson_path=geojson_path,
+            ).get_root().render(),
+            build_profile_map(
+                specs["light_food"],
+                geojson_path=geojson_path,
+            ).get_root().render(),
+        ]
+    else:
+        settings = map_config or get_amap_map_config()
+        html_contents = [
+            build_amap_map_html(
+                specs["convenience"],
+                credentials=resolved_credentials,
+                geojson_path=geojson_path,
+                map_config=settings,
+            ),
+            build_amap_map_html(
+                specs["light_food"],
+                credentials=resolved_credentials,
+                geojson_path=geojson_path,
+                map_config=settings,
+            ),
+        ]
     temporary = [
         _write_temp_html(target, content)
         for target, content in zip(targets, html_contents)

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from html import escape
+import re
 from typing import Any, Iterable
 
 
@@ -208,6 +209,143 @@ WORKBENCH_CSS = """
   line-height: 1.6;
 }
 
+.workbench-inline-legend {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  min-height: 28px;
+  margin: 4px 0 8px;
+  color: var(--workbench-muted);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.workbench-legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+
+.workbench-legend-swatch {
+  width: 10px;
+  height: 10px;
+  flex: 0 0 10px;
+  border-radius: 2px;
+}
+
+.workbench-decision-summary {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  min-height: 225px;
+  padding: 4px 2px 2px;
+}
+
+.workbench-decision-label {
+  color: var(--workbench-muted);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.workbench-decision-score {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: nowrap;
+  margin: 10px 0 18px;
+  color: var(--workbench-text);
+  font-size: 46px;
+  font-weight: 700;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.workbench-decision-score small {
+  flex: 0 0 auto;
+  margin-left: 4px;
+  color: var(--workbench-muted);
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.workbench-decision-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding-top: 14px;
+  border-top: 1px solid var(--workbench-border);
+}
+
+.workbench-rank {
+  color: var(--workbench-text);
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.workbench-status-badge {
+  display: inline-flex;
+  align-items: center;
+  min-height: 28px;
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.workbench-status-badge.is-success {
+  color: #0F5132;
+  background: #DDF3E8;
+}
+
+.workbench-status-badge.is-warning {
+  color: #7A4D00;
+  background: #FFF0C2;
+}
+
+.workbench-status-badge.is-neutral {
+  color: #475569;
+  background: #E9EDF2;
+}
+
+.st-key-report-content [data-testid="stMarkdownContainer"] {
+  color: var(--workbench-text);
+  font-size: 15px;
+  line-height: 1.75;
+}
+
+.st-key-report-content [data-testid="stMarkdownContainer"] h1 {
+  margin: 1.35rem 0 0.65rem;
+  font-size: 24px;
+  font-weight: 700;
+  line-height: 1.4;
+}
+
+.st-key-report-content [data-testid="stMarkdownContainer"] h2 {
+  margin: 1.2rem 0 0.6rem;
+  font-size: 20px;
+  line-height: 1.45;
+}
+
+.st-key-report-content [data-testid="stMarkdownContainer"] h3 {
+  margin: 1rem 0 0.5rem;
+  font-size: 17px;
+  line-height: 1.5;
+}
+
+.st-key-report-content [data-testid="stMarkdownContainer"] p,
+.st-key-report-content [data-testid="stMarkdownContainer"] li {
+  font-size: 15px;
+  line-height: 1.75;
+}
+
+.st-key-report-content [data-testid="stMarkdownContainer"] ul,
+.st-key-report-content [data-testid="stMarkdownContainer"] ol {
+  margin-bottom: 0.8rem;
+  padding-left: 1.35rem;
+}
+
 @media (max-width: 900px) {
   [data-testid="stMainBlockContainer"] {
     padding-left: 1rem;
@@ -240,6 +378,20 @@ WORKBENCH_CSS = """
 
   .workbench-page-header h1 {
     font-size: 22px;
+  }
+
+  .st-key-report-content [data-testid="stMarkdownContainer"] h1 {
+    font-size: 21px;
+  }
+
+  .st-key-report-content [data-testid="stMarkdownContainer"] h2 {
+    font-size: 18px;
+  }
+
+  .st-key-report-content [data-testid="stMarkdownContainer"],
+  .st-key-report-content [data-testid="stMarkdownContainer"] p,
+  .st-key-report-content [data-testid="stMarkdownContainer"] li {
+    font-size: 14px;
   }
 
   .workbench-metric-grid,
@@ -312,6 +464,30 @@ def render_metric_cards(
         '<section class="workbench-metric-grid">'
         + "".join(cards)
         + "</section>",
+    )
+
+
+def render_inline_legend(
+    st: Any,
+    items: Iterable[tuple[str, str]],
+) -> None:
+    """Render one stable horizontal legend with equal-size swatches."""
+    entries = []
+    for label, color in items:
+        if re.fullmatch(r"#[0-9A-Fa-f]{6}", color) is None:
+            raise ValueError(f"图例颜色必须是六位十六进制颜色：{color}")
+        entries.append(
+            '<span class="workbench-legend-item">'
+            '<span class="workbench-legend-swatch" '
+            f'style="background:{color}"></span>'
+            f"<span>{escape(str(label))}</span>"
+            "</span>"
+        )
+    _render_html(
+        st,
+        '<div class="workbench-inline-legend">'
+        + "".join(entries)
+        + "</div>",
     )
 
 

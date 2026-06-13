@@ -175,6 +175,50 @@ def make_geojson(path: Path) -> Path:
 
 
 class MapVizTests(unittest.TestCase):
+    def test_amap_credentials_use_explicit_values_then_environment(self):
+        explicit = map_viz.load_amap_js_credentials(
+            api_key="explicit-key",
+            security_code="explicit-code",
+        )
+        self.assertEqual(explicit.api_key, "explicit-key")
+        self.assertEqual(explicit.security_code, "explicit-code")
+
+        with patch.dict(
+            os.environ,
+            {
+                "AMAP_JS_KEY": "environment-key",
+                "AMAP_JS_SECURITY_CODE": "environment-code",
+            },
+            clear=False,
+        ):
+            environment = map_viz.load_amap_js_credentials()
+
+        self.assertEqual(environment.api_key, "environment-key")
+        self.assertEqual(environment.security_code, "environment-code")
+
+    def test_amap_credentials_allow_absent_pair_and_reject_partial_pair(self):
+        with patch.dict(
+            os.environ,
+            {"AMAP_JS_KEY": "", "AMAP_JS_SECURITY_CODE": ""},
+            clear=False,
+        ):
+            self.assertIsNone(map_viz.load_amap_js_credentials())
+
+        with patch.dict(
+            os.environ,
+            {
+                "AMAP_JS_KEY": "visible-key",
+                "AMAP_JS_SECURITY_CODE": "",
+            },
+            clear=False,
+        ):
+            with self.assertRaisesRegex(
+                ValueError,
+                "AMAP_JS_SECURITY_CODE",
+            ) as context:
+                map_viz.load_amap_js_credentials()
+        self.assertNotIn("visible-key", str(context.exception))
+
     def test_default_profile_specs_use_exact_step8_fields(self):
         with tempfile.TemporaryDirectory() as tmp_dir:
             base = Path(tmp_dir)
@@ -225,6 +269,29 @@ class MapVizTests(unittest.TestCase):
         self.assertEqual(
             map_viz.gcj02_to_wgs84(-73.9857, 40.7484),
             (-73.9857, 40.7484),
+        )
+
+    def test_folium_map_center_uses_converted_latitude_longitude_order(self):
+        frame = pd.DataFrame(
+            {
+                "centroid_lon": [106.70, 106.72],
+                "centroid_lat": [26.60, 26.62],
+            }
+        )
+        converted = [
+            map_viz.gcj02_to_wgs84(106.70, 26.60),
+            map_viz.gcj02_to_wgs84(106.72, 26.62),
+        ]
+
+        center = map_viz._map_center(frame)
+
+        self.assertAlmostEqual(
+            center[0],
+            sum(lat for _, lat in converted) / 2,
+        )
+        self.assertAlmostEqual(
+            center[1],
+            sum(lon for lon, _ in converted) / 2,
         )
 
     def test_convert_geojson_to_wgs84_handles_polygon_and_multipolygon(self):
@@ -300,6 +367,94 @@ class MapVizTests(unittest.TestCase):
             self.assertIn("metric_consumption", html)
             self.assertIn("top-rank-badge", html)
             self.assertIn("pointer-events:none", html)
+
+    def test_prepare_amap_payload_keeps_gcj02_and_four_map_states(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            base = Path(tmp_dir)
+            result_path = make_default_result(base / "result.csv")
+            geojson_path = make_geojson(base / "grids.geojson")
+            spec = map_viz.default_profile_specs(result_path)["convenience"]
+            source = json.loads(geojson_path.read_text(encoding="utf-8"))
+
+            payload = map_viz.prepare_amap_payload(
+                spec,
+                geojson_path=geojson_path,
+                top_n=10,
+            )
+
+            self.assertEqual(payload["coord_system"], "GCJ-02")
+            self.assertEqual(
+                payload["geojson"]["features"][0]["geometry"]["coordinates"],
+                source["features"][0]["geometry"]["coordinates"],
+            )
+            self.assertEqual(
+                payload["status_counts"],
+                {"uncollected": 1, "inactive": 1, "active": 2, "top": 1},
+            )
+            self.assertEqual(len(payload["top_markers"]), 1)
+            self.assertEqual(payload["top_markers"][0]["rank"], 1)
+
+    def test_build_amap_map_html_contains_loader_interactions_and_safe_json(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            base = Path(tmp_dir)
+            result_path = make_default_result(base / "result.csv")
+            geojson_path = make_geojson(base / "grids.geojson")
+            spec = map_viz.default_profile_specs(result_path)["convenience"]
+            credentials = map_viz.AmapJsCredentials(
+                api_key="test-js-key",
+                security_code="test-security-code",
+            )
+
+            html = map_viz.build_amap_map_html(
+                spec,
+                credentials=credentials,
+                geojson_path=geojson_path,
+                map_config={
+                    "provider": "amap_js",
+                    "js_api_version": "2.0",
+                    "map_style": "amap://styles/whitesmoke",
+                    "default_zoom": 11,
+                    "height": 680,
+                    "top_n": 10,
+                    "enable_folium_fallback": True,
+                },
+            )
+
+            self.assertIn("https://webapi.amap.com/loader.js", html)
+            self.assertIn("securityJsCode", html)
+            self.assertIn("test-js-key", html)
+            self.assertIn("test-security-code", html)
+            self.assertIn('version:"2.0"', html)
+            self.assertIn("AMap.Polygon", html)
+            self.assertIn("mouseover", html)
+            self.assertIn("mouseout", html)
+            self.assertIn("click", html)
+            self.assertIn("top-rank-badge", html)
+            self.assertIn("社区便利店评分图例", html)
+            self.assertIn("GCJ-02", html)
+            self.assertNotIn(">60-80<", html)
+            self.assertNotIn(">80-100<", html)
+            self.assertIn(
+                '<b class="legend-top-rank">1</b>全局 Top 10',
+                html,
+            )
+            self.assertNotIn("</script><script>", html)
+
+    def test_folium_legend_keeps_zero_to_sixty_and_numbered_top_marker(self):
+        legend = map_viz._legend_html(
+            "社区便利店",
+            include_uncollected=True,
+        )
+
+        self.assertIn(">0-20<", legend)
+        self.assertIn(">20-40<", legend)
+        self.assertIn(">40-60<", legend)
+        self.assertNotIn(">60-80<", legend)
+        self.assertNotIn(">80-100<", legend)
+        self.assertIn(
+            '<b class="legend-top-rank">1</b>全局 Top 10',
+            legend,
+        )
 
     def test_build_profile_map_falls_back_to_scored_centroids(self):
         with tempfile.TemporaryDirectory() as tmp_dir:
@@ -379,6 +534,40 @@ class MapVizTests(unittest.TestCase):
             self.assertEqual(
                 light_food_path.read_text(encoding="utf-8"),
                 "existing light food",
+            )
+
+    def test_write_default_maps_uses_amap_with_credentials_and_folium_without(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            base = Path(tmp_dir)
+            result_path = make_default_result(base / "result.csv")
+            geojson_path = make_geojson(base / "grids.geojson")
+            amap_dir = base / "amap"
+            folium_dir = base / "folium"
+            credentials = map_viz.AmapJsCredentials(
+                api_key="test-js-key",
+                security_code="test-security-code",
+            )
+
+            amap_paths = map_viz.write_default_maps(
+                result_path=result_path,
+                geojson_path=geojson_path,
+                output_dir=amap_dir,
+                credentials=credentials,
+            )
+            folium_paths = map_viz.write_default_maps(
+                result_path=result_path,
+                geojson_path=geojson_path,
+                output_dir=folium_dir,
+                credentials=None,
+            )
+
+            self.assertIn(
+                "https://webapi.amap.com/loader.js",
+                amap_paths[0].read_text(encoding="utf-8"),
+            )
+            self.assertIn(
+                "leaflet",
+                folium_paths[0].read_text(encoding="utf-8").lower(),
             )
 
 

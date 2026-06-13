@@ -76,16 +76,47 @@ def render_report_page(
         )
         result_key = f"{state_prefix}:result"
         error_key = f"{state_prefix}:error"
-        try:
-            st.session_state[result_key] = report_generator_func(
-                selected_grid_id,
-                profile,
-                use_llm=use_llm,
-            )
-            st.session_state.pop(error_key, None)
-        except Exception as exc:
-            st.session_state.pop(result_key, None)
-            st.session_state[error_key] = str(exc)
+        running_label = (
+            "正在生成智能报告，通常需要数秒，请勿重复点击。"
+            if use_llm
+            else "正在生成模板报告。"
+        )
+        complete_label = (
+            "智能报告生成完成。"
+            if use_llm
+            else "模板报告生成完成。"
+        )
+        failed_label = (
+            "智能报告生成失败。"
+            if use_llm
+            else "模板报告生成失败。"
+        )
+        with st.status(
+            running_label,
+            expanded=True,
+            state="running",
+        ) as generation_status:
+            try:
+                st.session_state[result_key] = report_generator_func(
+                    selected_grid_id,
+                    profile,
+                    use_llm=use_llm,
+                )
+                st.session_state.pop(error_key, None)
+            except Exception as exc:
+                st.session_state.pop(result_key, None)
+                st.session_state[error_key] = str(exc)
+                generation_status.update(
+                    label=failed_label,
+                    state="error",
+                    expanded=True,
+                )
+            else:
+                generation_status.update(
+                    label=complete_label,
+                    state="complete",
+                    expanded=False,
+                )
 
     def render_report_state(
         profile: MapProfileSpec,
@@ -120,7 +151,8 @@ def render_report_page(
             )
         else:
             st.info(f"DeepSeek 模型：{report.model}。")
-        st.markdown(report.content)
+        with st.container(key="report-content"):
+            st.markdown(report.content)
         st.download_button(
             "导出 Markdown",
             data=report.content,

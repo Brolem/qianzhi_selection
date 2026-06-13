@@ -31,7 +31,6 @@ def _foundation_row(
     frame = load_required_csv(path, required_columns)
     return {
         "data_name": data_name,
-        "file_path": str(Path(path)),
         "record_count": len(frame),
         "geographic_scope": geographic_scope,
         "data_role": data_role,

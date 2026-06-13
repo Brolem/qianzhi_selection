@@ -8,8 +8,11 @@ from src.pages.common import get_streamlit
 from src.visualization.map_viz import (
     MapProfileSpec,
     available_profile_specs,
+    build_amap_map_html,
     build_profile_map,
+    load_amap_js_credentials,
 )
+from src.config import get_amap_map_config
 from src.ui.workbench import render_page_header
 
 
@@ -20,6 +23,8 @@ def render_map_page(
     *,
     profile_specs: dict[str, MapProfileSpec] | None = None,
     map_builder: Any = build_profile_map,
+    amap_html_builder: Any = build_amap_map_html,
+    credential_loader: Any = load_amap_js_credentials,
     st_folium_func: Any = None,
     use_workbench_layout: bool = False,
     show_header: bool = True,
@@ -44,15 +49,23 @@ def render_map_page(
     )
     default_index = labels.index(preferred_label) if preferred_label in labels else 0
 
-    def select_spec() -> MapProfileSpec:
+    map_config = get_amap_map_config()
+
+    def select_spec() -> tuple[MapProfileSpec, bool]:
         selected_label = st.selectbox(
             "评分方案",
             labels,
             index=default_index,
         )
-        return specs[selected_label]
+        toggle = getattr(st, "toggle", None)
+        compatibility = (
+            bool(toggle("使用兼容地图", value=False))
+            if callable(toggle)
+            else False
+        )
+        return specs[selected_label], compatibility
 
-    def render_map(spec: MapProfileSpec) -> None:
+    def render_folium(spec: MapProfileSpec) -> None:
         if st_folium_func is not None:
             try:
                 result_map = map_builder(spec)
@@ -78,23 +91,57 @@ def render_map_page(
             return
         components.html(
             spec.static_html_path.read_text(encoding="utf-8"),
-            height=680,
+            height=int(map_config["height"]),
             scrolling=True,
         )
+
+    def render_map(spec: MapProfileSpec, compatibility: bool) -> None:
+        if not compatibility:
+            try:
+                credentials = credential_loader()
+            except ValueError as exc:
+                st.warning(str(exc))
+                credentials = None
+            if credentials is not None:
+                try:
+                    content = amap_html_builder(
+                        spec,
+                        credentials=credentials,
+                        map_config=map_config,
+                    )
+                except (FileNotFoundError, KeyError, TypeError, ValueError) as exc:
+                    st.error(str(exc))
+                    return
+                components.html(
+                    content,
+                    height=int(map_config["height"]),
+                    scrolling=False,
+                )
+                return
+            if not map_config["enable_folium_fallback"]:
+                st.error(
+                    "未配置 AMAP_JS_KEY 和 AMAP_JS_SECURITY_CODE，"
+                    "且兼容地图回退已关闭。"
+                )
+                return
+            st.info(
+                "未配置高德 JS API 凭据，当前自动使用兼容地图。"
+            )
+        render_folium(spec)
 
     if use_workbench_layout:
         control_panel, map_panel = st.columns([1, 4], gap="large")
         with control_panel:
             with st.container(border=True):
                 st.subheader("地图参数")
-                spec = select_spec()
+                spec, compatibility = select_spec()
                 st.caption("浅灰表示未采集，中性灰表示无 POI 活动。")
         with map_panel:
-            render_map(spec)
+            render_map(spec, compatibility)
         return
 
-    spec = select_spec()
-    render_map(spec)
+    spec, compatibility = select_spec()
+    render_map(spec, compatibility)
 
 
 def render(st_module: Any | None = None) -> None:

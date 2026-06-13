@@ -24,7 +24,13 @@ from src.visualization.map_viz import MapProfileSpec
 
 
 class FakeStreamlit:
-    def __init__(self, selected_label=None, clicked_buttons=None, session_state=None):
+    def __init__(
+        self,
+        selected_label=None,
+        clicked_buttons=None,
+        session_state=None,
+        toggle_value=False,
+    ):
         self.selected_label = selected_label
         self.clicked_buttons = set(clicked_buttons or [])
         self.session_state = session_state if session_state is not None else {}
@@ -38,6 +44,11 @@ class FakeStreamlit:
         self.column_calls = []
         self.subheaders = []
         self.captions = []
+        self.toggle_value = toggle_value
+        self.toggle_calls = []
+        self.status_calls = []
+        self.status_updates = []
+        self.container_calls = []
 
     def header(self, text):
         self.headers.append(text)
@@ -78,8 +89,13 @@ class FakeStreamlit:
         count = spec if isinstance(spec, int) else len(spec)
         return [FakeContext() for _ in range(count)]
 
-    def container(self, border=False):
-        del border
+    def container(self, border=False, key=None):
+        self.container_calls.append(
+            {
+                "border": border,
+                "key": key,
+            }
+        )
         return FakeContext()
 
     def button(self, label):
@@ -87,6 +103,30 @@ class FakeStreamlit:
 
     def download_button(self, label, **kwargs):
         self.downloads.append((label, kwargs))
+
+    def toggle(self, label, value=False):
+        self.toggle_calls.append((label, value))
+        return self.toggle_value
+
+    def status(
+        self,
+        label,
+        *,
+        expanded=False,
+        state="running",
+        type="default",
+        width="stretch",
+    ):
+        self.status_calls.append(
+            {
+                "label": label,
+                "expanded": expanded,
+                "state": state,
+                "type": type,
+                "width": width,
+            }
+        )
+        return FakeStatus(self.status_updates)
 
 
 class FakeComponents:
@@ -109,6 +149,14 @@ class FakeContext:
 
     def __exit__(self, exc_type, exc_value, traceback):
         return False
+
+
+class FakeStatus(FakeContext):
+    def __init__(self, updates):
+        self.updates = updates
+
+    def update(self, **kwargs):
+        self.updates.append(kwargs)
 
 
 class FakeNavigationPage:
@@ -424,6 +472,7 @@ class AppHelperTests(unittest.TestCase):
                 "社区便利店",
                 profile_specs=specs,
                 map_builder=lambda spec: map_object,
+                credential_loader=lambda: None,
                 st_folium_func=lambda fig, **kwargs: rendered.append((fig, kwargs)),
             )
 
@@ -433,6 +482,69 @@ class AppHelperTests(unittest.TestCase):
             self.assertEqual(rendered[0][1]["height"], 680)
             self.assertTrue(rendered[0][1]["use_container_width"])
             self.assertEqual(rendered[0][1]["key"], "site_map_custom_01")
+            self.assertEqual(components.calls, [])
+
+    def test_render_map_page_prefers_amap_html_when_credentials_exist(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            base = Path(tmp_dir)
+            label = "默认｜社区便利店"
+            spec = make_map_spec(
+                "convenience",
+                "社区便利店",
+                base / "default.csv",
+                base / "default.html",
+            )
+            st = FakeStreamlit(label)
+            components = FakeComponents()
+            folium_calls = []
+            html_calls = []
+
+            render_map_page(
+                st,
+                components,
+                profile_specs={label: spec},
+                amap_html_builder=lambda selected, **kwargs: (
+                    html_calls.append((selected, kwargs)) or "<div>amap</div>"
+                ),
+                credential_loader=lambda: object(),
+                st_folium_func=lambda fig, **kwargs: folium_calls.append(
+                    (fig, kwargs)
+                ),
+            )
+
+            self.assertEqual(len(components.calls), 1)
+            self.assertIn("amap", components.calls[0]["content"])
+            self.assertEqual(html_calls[0][0], spec)
+            self.assertEqual(folium_calls, [])
+
+    def test_render_map_page_uses_folium_when_compatibility_is_selected(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            base = Path(tmp_dir)
+            label = "默认｜社区便利店"
+            spec = make_map_spec(
+                "convenience",
+                "社区便利店",
+                base / "default.csv",
+                base / "default.html",
+            )
+            st = FakeStreamlit(label, toggle_value=True)
+            components = FakeComponents()
+            map_object = object()
+            folium_calls = []
+
+            render_map_page(
+                st,
+                components,
+                profile_specs={label: spec},
+                map_builder=lambda selected: map_object,
+                amap_html_builder=lambda selected, **kwargs: "<div>amap</div>",
+                credential_loader=lambda: object(),
+                st_folium_func=lambda fig, **kwargs: folium_calls.append(
+                    (fig, kwargs)
+                ),
+            )
+
+            self.assertEqual(folium_calls[0][0], map_object)
             self.assertEqual(components.calls, [])
 
     def test_render_map_page_uses_workbench_control_and_map_columns(self):
@@ -455,6 +567,7 @@ class AppHelperTests(unittest.TestCase):
                 FakeComponents(),
                 profile_specs=specs,
                 map_builder=lambda spec: object(),
+                credential_loader=lambda: None,
                 st_folium_func=lambda fig, **kwargs: rendered.append((fig, kwargs)),
                 use_workbench_layout=True,
                 show_header=False,
@@ -486,6 +599,7 @@ class AppHelperTests(unittest.TestCase):
                 components,
                 "社区便利店",
                 profile_specs=specs,
+                credential_loader=lambda: None,
                 st_folium_func=None,
             )
 
@@ -513,6 +627,7 @@ class AppHelperTests(unittest.TestCase):
                 components,
                 "社区便利店",
                 profile_specs=specs,
+                credential_loader=lambda: None,
                 st_folium_func=None,
             )
 
@@ -564,6 +679,25 @@ class AppHelperTests(unittest.TestCase):
             generator.assert_called_once()
             self.assertIn("deepseek-v4-pro", clicked.infos[0])
             self.assertEqual(clicked.markdowns, ["# 智能报告"])
+            self.assertIn(
+                {"border": False, "key": "report-content"},
+                clicked.container_calls,
+            )
+            self.assertEqual(
+                clicked.status_calls[0]["label"],
+                "正在生成智能报告，通常需要数秒，请勿重复点击。",
+            )
+            self.assertEqual(clicked.status_calls[0]["state"], "running")
+            self.assertEqual(
+                clicked.status_updates,
+                [
+                    {
+                        "label": "智能报告生成完成。",
+                        "state": "complete",
+                        "expanded": False,
+                    }
+                ],
+            )
 
             refreshed = FakeStreamlit(
                 selected_label={"评分方案": "默认｜社区便利店"},
@@ -577,6 +711,7 @@ class AppHelperTests(unittest.TestCase):
             )
             generator.assert_called_once()
             self.assertEqual(refreshed.markdowns, ["# 智能报告"])
+            self.assertEqual(refreshed.status_calls, [])
 
     def test_render_report_page_uses_workbench_columns_and_idle_state(self):
         with tempfile.TemporaryDirectory() as tmp_dir:
@@ -621,6 +756,16 @@ class AppHelperTests(unittest.TestCase):
                 report_generator_func=generator,
             )
             self.assertIn("DeepSeek unavailable", failed.errors[0])
+            self.assertEqual(
+                failed.status_updates,
+                [
+                    {
+                        "label": "智能报告生成失败。",
+                        "state": "error",
+                        "expanded": True,
+                    }
+                ],
+            )
 
             generator.side_effect = None
             generator.return_value = ReportGenerationResult(

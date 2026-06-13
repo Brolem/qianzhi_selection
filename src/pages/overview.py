@@ -21,6 +21,7 @@ from src.pages.common import (
 from src.config import get_poi_categories
 from src.profile_catalog import ResultProfileSpec
 from src.ui.workbench import (
+    render_inline_legend,
     render_metric_cards,
     render_page_header,
 )
@@ -200,7 +201,7 @@ def _poi_theme_chart(frame: pd.DataFrame) -> alt.Chart:
     ]
     return (
         alt.Chart(frame)
-        .mark_bar(cornerRadiusEnd=2)
+        .mark_bar(cornerRadiusEnd=2, size=9)
         .encode(
             x=alt.X(
                 "poi_count:Q",
@@ -211,15 +212,20 @@ def _poi_theme_chart(frame: pd.DataFrame) -> alt.Chart:
                 "theme_label:N",
                 title=None,
                 sort=theme_order,
+                axis=alt.Axis(
+                    labelFontSize=12,
+                    labelPadding=8,
+                ),
             ),
             yOffset=alt.YOffset("district_name:N"),
             color=alt.Color(
                 "district_name:N",
-                title="区县",
+                title=None,
                 scale=alt.Scale(
                     domain=["云岩区", "南明区", "观山湖区"],
                     range=["#176B4A", "#2F6FBE", "#D98252"],
                 ),
+                legend=None,
             ),
             tooltip=[
                 alt.Tooltip("theme_label:N", title="主题"),
@@ -228,7 +234,7 @@ def _poi_theme_chart(frame: pd.DataFrame) -> alt.Chart:
                 alt.Tooltip("poi_count:Q", title="原始数量", format=",.0f"),
             ],
         )
-        .properties(height=270)
+        .properties(height=255)
     )
 
 
@@ -236,22 +242,27 @@ def _score_average_chart(frame: pd.DataFrame) -> alt.LayerChart:
     scale = alt.Scale(domain=[20, 40], clamp=True)
     score_axis = alt.Axis(values=[20, 25, 30, 35, 40])
     base = alt.Chart(frame)
-    connector = base.mark_rule(
-        color="#AAB2BF",
-        strokeWidth=2,
+    bars = base.mark_bar(
+        size=13,
+        cornerRadiusEnd=4,
     ).encode(
         x=alt.X(
-            "min(average_score):Q",
+            "average_score:Q",
             title="区县活跃网格平均得分",
             scale=scale,
             axis=score_axis,
         ),
-        x2=alt.X2("max(average_score):Q"),
-        y=alt.Y("district_name:N", title=None),
-    )
-    points = base.mark_point(filled=True, size=105).encode(
-        x=alt.X("average_score:Q", scale=scale),
-        y=alt.Y("district_name:N", title=None),
+        x2=alt.X2(datum=20),
+        y=alt.Y(
+            "district_name:N",
+            title=None,
+            sort=["云岩区", "南明区", "观山湖区"],
+            axis=alt.Axis(
+                labelFontSize=12,
+                labelPadding=8,
+            ),
+        ),
+        yOffset=alt.YOffset("profile_name:N"),
         color=alt.Color(
             "profile_name:N",
             title="评分方案",
@@ -259,6 +270,7 @@ def _score_average_chart(frame: pd.DataFrame) -> alt.LayerChart:
                 domain=["社区便利店", "轻餐饮"],
                 range=["#176B4A", "#D98252"],
             ),
+            legend=None,
         ),
         tooltip=[
             alt.Tooltip("district_name:N", title="区县"),
@@ -275,27 +287,28 @@ def _score_average_chart(frame: pd.DataFrame) -> alt.LayerChart:
             ),
         ],
     )
-    convenience_labels = (
-        base.transform_filter(alt.datum.profile_name == "社区便利店")
-        .mark_text(align="right", dx=-8, color="#176B4A", fontSize=11)
-        .encode(
-            x=alt.X("average_score:Q", scale=scale),
-            y=alt.Y("district_name:N", title=None),
-            text=alt.Text("average_score:Q", format=".1f"),
-        )
+    labels = base.mark_text(
+        align="left",
+        baseline="middle",
+        dx=6,
+        fontSize=11,
+        fontWeight=600,
+    ).encode(
+        x=alt.X("average_score:Q", scale=scale),
+        y=alt.Y(
+            "district_name:N",
+            title=None,
+            sort=["云岩区", "南明区", "观山湖区"],
+        ),
+        yOffset=alt.YOffset("profile_name:N"),
+        text=alt.Text("average_score:Q", format=".1f"),
+        color=alt.condition(
+            alt.datum.profile_name == "社区便利店",
+            alt.value("#176B4A"),
+            alt.value("#D98252"),
+        ),
     )
-    food_labels = (
-        base.transform_filter(alt.datum.profile_name == "轻餐饮")
-        .mark_text(align="left", dx=8, color="#D98252", fontSize=11)
-        .encode(
-            x=alt.X("average_score:Q", scale=scale),
-            y=alt.Y("district_name:N", title=None),
-            text=alt.Text("average_score:Q", format=".1f"),
-        )
-    )
-    return (
-        connector + points + convenience_labels + food_labels
-    ).properties(height=210)
+    return (bars + labels).properties(height=255)
 
 
 def render(st_module: Any | None = None) -> None:
@@ -348,9 +361,17 @@ def render(st_module: Any | None = None) -> None:
         return
 
     st.subheader("数据概览")
-    heatmap_column, score_column = st.columns([1.35, 1], gap="large")
-    with heatmap_column:
+    theme_column, score_column = st.columns([1.15, 1], gap="large")
+    with theme_column:
         st.markdown("**三区五类 POI 主题摘要**")
+        render_inline_legend(
+            st,
+            [
+                ("云岩区", "#176B4A"),
+                ("南明区", "#2F6FBE"),
+                ("观山湖区", "#D98252"),
+            ],
+        )
         st.altair_chart(_poi_theme_chart(theme_data), width="stretch")
         st.caption(
             "15 类 POI 汇总为社区零售、餐饮消费、生活客群、"
@@ -358,6 +379,13 @@ def render(st_module: Any | None = None) -> None:
         )
     with score_column:
         st.markdown("**活跃网格区县平均得分**")
+        render_inline_legend(
+            st,
+            [
+                ("社区便利店", "#176B4A"),
+                ("轻餐饮", "#D98252"),
+            ],
+        )
         st.altair_chart(_score_average_chart(average_data), width="stretch")
         st.caption(
             "每个区县按活跃网格计算两类默认方案平均分；"

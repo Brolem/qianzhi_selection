@@ -2,7 +2,7 @@
 
 > 版本：v2.0  
 > 目标：将项目从旧版“Geofabrik/OSM 两阶段选址推荐”调整为“区县背景约束下的网格级多因子商业选址推荐模型”，并将前端改造成类似百度地图慧眼的商业选址工作台。  
-> 当前推荐技术栈：Python + Streamlit + 高德 Web 服务 API + Folium / streamlit-folium + Markdown 报告生成。
+> 当前推荐技术栈：Python + Streamlit + 高德 Web 服务 API + 高德 JS API 2.0 + Folium 兼容回退 + Markdown 报告生成。
 
 ---
 
@@ -91,7 +91,7 @@
 | 官方就业数据 | 赛事官方数据 | 就业客群、收入水平、稳定消费需求背景 |
 | POI 数据 | 高德 POI API，百度/腾讯作为备选 | 网格级商业、交通、生活配套、竞品、共生业态统计 |
 | 行政区划 | 高德行政区划 API | 区县信息、区县边界、区县中心点 |
-| 地图展示 | Folium / streamlit-folium / Streamlit components | 推荐网格地图、热力图、点位提示 |
+| 地图展示 | 高德 JS API 2.0 / Streamlit components / Folium 兼容回退 | GCJ-02 推荐网格地图、热力图、点位提示 |
 | 示例数据 | data/demo/ | 无 AMAP_KEY 时保证项目可演示 |
 
 ---
@@ -835,7 +835,7 @@ python -m src.visualization.map_viz 入口，不新增重复的 src/map_viz.py�
 3. outputs/figures/poi_overview_map.html，可选
 
 功能要求：
-1. 使用 Folium 生成交互地图。
+1. 使用高德 JS API 2.0 作为正式交互地图主链，Folium 作为兼容回退。
 2. 如果 candidate_grids.geojson 存在，展示网格面；
    如果不存在，则展示中心点。
 3. 地图支持：
@@ -848,16 +848,18 @@ python -m src.visualization.map_viz 入口，不新增重复的 src/map_viz.py�
    - 无 POI 活动网格显示中性灰；
    - 活跃网格按固定 0-100 色阶着色；
    - 全局 Top 10 使用编号标记和加粗边界。
-5. 高德原始数据保持 GCJ-02，地图渲染时转换为 WGS84，
-   不改写 Step 4 到 Step 8 的正式数据。
-6. app.py 地图页使用 streamlit-folium 动态展示默认或自定义评分方案；
-   组件不可用时，默认方案用 components.html 嵌入静态 HTML。
+5. 高德主链直接使用 GCJ-02，不改写 Step 4 到 Step 8 的正式数据；
+   Folium 回退路径才临时转换为 WGS84。
+6. 地图页使用 Streamlit components 嵌入高德 HTML，支持默认与自定义评分方案；
+   页面提供“使用兼容地图”开关，无 JS 凭据时自动回退 Folium。
 7. 自定义方案读取 outputs/results/custom_profiles/<profile_id>/
    grid_score_result.csv 中稳定的 profile_* 字段，不预生成自定义 HTML。
+8. 高德 Web 服务继续使用 AMAP_KEY；地图独立读取 AMAP_JS_KEY 与
+   AMAP_JS_SECURITY_CODE，凭据不得写入仓库文件。
 
 禁止：
-- 不要依赖必须联网才能打开的商业地图 key；
-- 不要强制使用高德 JS API；
+- 不要把高德 Key 或安全密钥写入 config.yaml、源码、日志或文档；
+- 不要把浏览器端高德 HTML 提交到 Git；
 - 不要在地图上显示真实门牌号推荐。
 ```
 
@@ -1231,7 +1233,7 @@ streamlit run src/app.py
 输入：
 - outputs/figures/convenience_grid_map.html
 - outputs/figures/light_food_grid_map.html
-或由 src/map_viz.py 动态生成。
+或由 src/visualization/map_viz.py 动态生成。
 
 页面功能：
 1. 选择业态：
@@ -1252,14 +1254,13 @@ streamlit run src/app.py
    - Top N 高亮；
    - tooltip 显示 grid_id、区县、得分、优势、风险。
 
-4. 如果地图 HTML 不存在：
-   显示提示：
-   请先运行 python src/map_viz.py
+4. 高德 JS API 使用 GCJ-02 原始网格数据；用户可主动切换 Folium 兼容地图。
+5. 缺少 AMAP_JS_KEY 或 AMAP_JS_SECURITY_CODE 时自动回退 Folium，并显示准确说明。
 
 禁止：
-- 不要接入必须联网才能显示的商业地图底图；
+- 不要把任何高德凭据写入仓库；
 - 不要显示门牌号级结论；
-- 不要强依赖高德 JS Key。
+- 不要在高德加载失败时伪装成成功。
 ```
 
 ---
@@ -1277,15 +1278,19 @@ streamlit run src/app.py
 
 输入：
 - outputs/results/grid_stage_score_result.csv
-- src/report_generator.py
+- outputs/results/profile_metadata.json
+- outputs/results/custom_profiles/<profile_id>/
+- src/reporting/report_generator.py
 
 页面流程：
-1. 选择业态：
-   - 便利店
-   - 轻餐饮
+1. 选择评分方案：
+   - 默认社区便利店
+   - 默认轻餐饮
+   - 有效自定义评分方案
 
 2. 选择 grid_id：
-   下拉框显示 grid_id + district_name + score。
+   仅列出有 POI 活动且具有有效排名的网格；
+   下拉框显示全局排名 + district_name + grid_id + score。
 
 3. 点击生成报告。
 
@@ -1295,15 +1300,15 @@ streamlit run src/app.py
    - Markdown 文件
 
 报告必须包含：
-一、候选网格基本信息
-二、适配业态判断
+一、评价网格基本信息
+二、适配业态与推荐等级
 三、交通可达性分析
 四、消费潜力分析
 五、就业/办公客群代理分析
 六、共生业态分析
 七、竞争压力分析
-八、主要优势
-九、主要风险
+八、商业氛围与权重方案
+九、主要优势与风险
 十、经营建议
 十一、数据来源与限制说明
 
@@ -1311,6 +1316,25 @@ streamlit run src/app.py
 - 不要编造真实租金；
 - 不要编造真实客流；
 - 不要编造真实营收。
+```
+
+### 当前实际实施
+
+- 页面模块为 `src/pages/report_center.py`，报告引擎为 `src/reporting/report_generator.py`，不使用总控旧示例中的根目录模块路径。
+- 页面使用独立评分方案选择器，支持默认社区便利店、默认轻餐饮和有效自定义评分方案；只列出有 POI 活动且具有有效排名的网格。
+- 页面仅在用户点击“生成智能报告”后调用 DeepSeek，并按评分方案和网格写入 Streamlit 会话状态，页面刷新不会重复调用。
+- 默认使用 `deepseek-v4-pro` 非思考模式；仅连接、超时、限流、服务端错误或模型不可用时回退 `deepseek-v4-flash`。鉴权、余额、请求参数和输入数据错误直接展示，不通过模板或切换模型伪装成功。
+- DeepSeek 调用失败后，用户可明确点击“使用模板报告”；模板报告与 API 成功状态分别显示。
+- 报告采用 Step 10 已确认的 11 章结构，保留“商业氛围与权重方案”，将主要优势和主要风险合并为一个章节。
+- 页面支持 Markdown 预览与下载；业务报告不显示模型品牌，页面状态区显示实际使用的 Pro、Flash 或模板模式。
+- 2026 年 6 月 13 日已使用用户级 `DEEPSEEK_API_KEY` 完成真实连通性验证，`deepseek-v4-pro` 成功返回完整报告，未触发 Flash 回退。
+
+### 验收命令
+
+```powershell
+$env:DEEPSEEK_API_KEY = [Environment]::GetEnvironmentVariable("DEEPSEEK_API_KEY", "User")
+python -m unittest tests.test_report_generator tests.test_app -v
+streamlit run src/app.py
 ```
 
 ---
@@ -1470,10 +1494,13 @@ Markdown 报告
 4. Streamlit `st.navigation` 文档：  
    https://docs.streamlit.io/develop/api-reference/navigation/st.navigation
 
-5. Folium 官方文档：  
+5. 高德地图 JS API 2.0 文档：
+   https://lbs.amap.com/api/javascript-api-v2/summary
+
+6. Folium 官方文档：
    https://python-visualization.github.io/folium/
 
-6. streamlit-folium GitHub：  
+7. streamlit-folium GitHub：
    https://github.com/randyzwitch/streamlit-folium
 
 ---

@@ -27,6 +27,18 @@ class ConfigHelperTests(unittest.TestCase):
                 "primary_max_retries": 1,
             },
         )
+        self.assertEqual(
+            config_module.get_amap_map_config(cfg),
+            {
+                "provider": "amap_js",
+                "js_api_version": "2.0",
+                "map_style": "amap://styles/whitesmoke",
+                "default_zoom": 11,
+                "height": 680,
+                "top_n": 10,
+                "enable_folium_fallback": True,
+            },
+        )
 
         for key in [
             "official_raw_dir",

@@ -5,6 +5,7 @@ from src.ui.workbench import (
     WORKBENCH_CSS,
     apply_workbench_theme,
     render_brand_bar,
+    render_inline_legend,
     render_metric_cards,
     render_page_header,
     render_workflow_steps,
@@ -37,6 +38,12 @@ class WorkbenchUiTests(unittest.TestCase):
         self.assertIn("flex: 1 1 100% !important", WORKBENCH_CSS)
         self.assertIn("@media (max-width: 600px)", WORKBENCH_CSS)
         self.assertIn("font-size: 16px", WORKBENCH_CSS)
+        self.assertIn(".st-key-report-content", WORKBENCH_CSS)
+        self.assertIn(
+            '.st-key-report-content [data-testid="stMarkdownContainer"] h1',
+            WORKBENCH_CSS,
+        )
+        self.assertIn("font-size: 24px", WORKBENCH_CSS)
 
     def test_theme_has_no_external_assets_gradients_or_javascript(self):
         lowered = WORKBENCH_CSS.lower()
@@ -87,6 +94,23 @@ class WorkbenchUiTests(unittest.TestCase):
         for value in ("3", "790", "15", "41"):
             self.assertIn(f">{value}<", content)
         self.assertIn("&lt;需保留审计边界&gt;", content)
+
+    def test_inline_legend_uses_equal_swatch_and_escaped_labels(self):
+        st = FakeStreamlit()
+
+        render_inline_legend(
+            st,
+            [
+                ("社区便利店", "#176B4A"),
+                ("轻餐饮<script>", "#D98252"),
+            ],
+        )
+
+        content = st.html_calls[0]
+        self.assertEqual(content.count("workbench-legend-item"), 2)
+        self.assertEqual(content.count("workbench-legend-swatch"), 2)
+        self.assertIn("社区便利店", content)
+        self.assertIn("轻餐饮&lt;script&gt;", content)
 
     def test_workflow_renders_four_steps_and_marks_step_three_active(self):
         st = FakeStreamlit()

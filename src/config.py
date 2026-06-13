@@ -127,3 +127,42 @@ def get_poi_typecodes(config: dict[str, Any] | None = None) -> dict[str, str]:
     if not isinstance(typecodes, dict):
         raise KeyError("config.yaml 缺少 poi_typecodes")
     return dict(typecodes)
+
+
+def get_amap_map_config(
+    config: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Return validated non-sensitive Amap JS rendering settings."""
+    cfg = config or load_config()
+    values = cfg.get("map")
+    if not isinstance(values, dict):
+        raise KeyError("config.yaml 缺少 map")
+    required = [
+        "provider",
+        "js_api_version",
+        "map_style",
+        "default_zoom",
+        "height",
+        "top_n",
+        "enable_folium_fallback",
+    ]
+    missing = [field for field in required if field not in values]
+    if missing:
+        raise KeyError("config.yaml 缺少 map." + ", map.".join(missing))
+    result = {field: values[field] for field in required}
+    if result["provider"] != "amap_js":
+        raise ValueError("config.yaml 中 map.provider 必须为 amap_js")
+    if str(result["js_api_version"]) != "2.0":
+        raise ValueError("config.yaml 中 map.js_api_version 必须为 2.0")
+    for field in ["default_zoom", "height", "top_n"]:
+        if isinstance(result[field], bool) or not isinstance(result[field], int):
+            raise ValueError(f"config.yaml 中 map.{field} 必须为整数")
+        if result[field] <= 0:
+            raise ValueError(f"config.yaml 中 map.{field} 必须大于 0")
+    if not isinstance(result["map_style"], str) or not result["map_style"]:
+        raise ValueError("config.yaml 中 map.map_style 必须为非空文本")
+    if not isinstance(result["enable_folium_fallback"], bool):
+        raise ValueError(
+            "config.yaml 中 map.enable_folium_fallback 必须为布尔值"
+        )
+    return result

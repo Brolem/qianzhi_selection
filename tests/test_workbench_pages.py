@@ -15,10 +15,13 @@ from src.pages.district_compare import (
     build_district_poi_comparison,
 )
 from src.pages.grid_recommendation import (
+    _metric_chart,
+    _render_selected_grid_detail,
     metric_breakdown_data,
     ranked_recommendation_rows,
 )
 from src.pages.overview import (
+    _poi_theme_chart,
     _score_average_chart,
     build_poi_theme_summary_data,
     build_score_average_data,
@@ -148,6 +151,7 @@ class WorkbenchPageTests(unittest.TestCase):
 
             self.assertEqual([row["record_count"] for row in rows], [1, 1, 1, 1])
             self.assertEqual(rows[0]["data_role"], "区县边界与空间约束")
+            self.assertNotIn("file_path", rows[0])
             self.assertEqual(rows[1]["geographic_scope"], "贵阳市三个目标区县的 60 个样本网格")
             self.assertEqual(rows[2]["geographic_scope"], "贵州省级背景")
             self.assertEqual(rows[3]["geographic_scope"], "贵州省级背景")
@@ -316,6 +320,14 @@ class WorkbenchPageTests(unittest.TestCase):
             self.assertEqual(averages["active_grid_count"].tolist(), [1, 1])
             self.assertEqual(averages["average_score"].tolist(), [80.0, 70.0])
 
+            theme_chart_spec = _poi_theme_chart(summary).to_dict()
+            self.assertIsNone(
+                theme_chart_spec["encoding"]["color"]["legend"],
+            )
+            self.assertIsNone(
+                theme_chart_spec["encoding"]["color"]["title"],
+            )
+
             chart_spec = _score_average_chart(averages).to_dict()
             x_encoding = chart_spec["layer"][0]["encoding"]["x"]
             self.assertEqual(x_encoding["scale"]["domain"], [20, 40])
@@ -323,6 +335,21 @@ class WorkbenchPageTests(unittest.TestCase):
                 x_encoding["axis"]["values"],
                 [20, 25, 30, 35, 40],
             )
+            self.assertEqual(chart_spec["layer"][0]["mark"]["type"], "bar")
+            self.assertEqual(
+                chart_spec["layer"][0]["encoding"]["yOffset"]["field"],
+                "profile_name",
+            )
+            self.assertEqual(chart_spec["layer"][1]["mark"]["type"], "text")
+            self.assertEqual(
+                chart_spec["layer"][1]["encoding"]["yOffset"]["field"],
+                "profile_name",
+            )
+            self.assertIsNone(
+                chart_spec["layer"][0]["encoding"]["color"]["legend"],
+            )
+            self.assertEqual(theme_chart_spec["height"], chart_spec["height"])
+            self.assertEqual(theme_chart_spec["height"], 255)
 
     def test_district_poi_comparison_uses_raw_grouped_counts(self):
         with tempfile.TemporaryDirectory() as tmp_dir:
@@ -465,6 +492,85 @@ class WorkbenchPageTests(unittest.TestCase):
 
         self.assertEqual(result["metric_name"].tolist()[4], "低竞争得分")
         self.assertEqual(result["metric_value"].tolist(), [10, 20, 30, 40, 80, 60])
+
+    def test_selected_grid_detail_uses_compact_summary_and_chart_columns(self):
+        class Context:
+            def __enter__(self):
+                return self
+
+            def __exit__(self, exc_type, exc, traceback):
+                return False
+
+        class FakeStreamlit:
+            def __init__(self):
+                self.column_specs = []
+                self.html_calls = []
+                self.markdown_calls = []
+                self.chart_count = 0
+
+            def columns(self, spec, gap):
+                self.column_specs.append((spec, gap))
+                return Context(), Context()
+
+            def container(self, border):
+                self.border = border
+                return Context()
+
+            def html(self, value):
+                self.html_calls.append(value)
+
+            def markdown(self, value, **kwargs):
+                self.markdown_calls.append((value, kwargs))
+
+            def altair_chart(self, chart, width):
+                self.chart_count += 1
+                self.chart_width = width
+
+        view = type(
+            "View",
+            (),
+            {
+                "score_field": "profile_score",
+                "rank_field": "profile_rank",
+                "level_field": "profile_recommendation_level",
+                "synergy_field": "convenience_synergy_score",
+                "competition_score_field": "profile_competition_score",
+            },
+        )()
+        selected = pd.Series(
+            {
+                "profile_score": 83.03,
+                "profile_rank": 1,
+                "profile_recommendation_level": "推荐",
+                "traffic_accessibility": 100,
+                "consumption_potential": 96,
+                "employment_customer_proxy": 99,
+                "convenience_synergy_score": 96,
+                "profile_competition_score": 0,
+                "business_atmosphere": 99,
+            }
+        )
+        st = FakeStreamlit()
+
+        _render_selected_grid_detail(st, selected, view)
+
+        self.assertEqual(st.column_specs, [([1, 2.4], "large")])
+        self.assertEqual(len(st.html_calls), 1)
+        self.assertIn("83.03", st.html_calls[0])
+        self.assertIn("全局 #1", st.html_calls[0])
+        self.assertIn("推荐", st.html_calls[0])
+        self.assertEqual(st.chart_count, 1)
+
+        chart_spec = _metric_chart(
+            metric_breakdown_data(
+                selected,
+                synergy_field=view.synergy_field,
+                competition_score_field=view.competition_score_field,
+            )
+        ).to_dict()
+        self.assertEqual(len(chart_spec["layer"]), 3)
+        self.assertEqual(chart_spec["layer"][0]["mark"]["color"], "#E7ECEA")
+        self.assertEqual(chart_spec["layer"][2]["mark"]["type"], "text")
 
 
 if __name__ == "__main__":

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from decimal import Decimal
+from html import escape
 from typing import Any
 
 import altair as alt
@@ -273,28 +274,128 @@ def _weight_chart(percentages: dict[str, float]) -> alt.Chart:
     )
 
 
-def _metric_chart(frame: pd.DataFrame) -> alt.Chart:
-    return (
-        alt.Chart(frame)
-        .mark_bar(color="#176B4A", cornerRadiusEnd=2)
-        .encode(
-            x=alt.X(
-                "metric_value:Q",
-                title="指标得分",
-                scale=alt.Scale(domain=[0, 100]),
-            ),
-            y=alt.Y(
-                "metric_name:N",
-                title=None,
-                sort=frame["metric_name"].tolist(),
-            ),
-            tooltip=[
-                alt.Tooltip("metric_name:N", title="指标"),
-                alt.Tooltip("metric_value:Q", title="得分", format=".2f"),
-            ],
-        )
-        .properties(height=240)
+def _metric_chart(frame: pd.DataFrame) -> alt.LayerChart:
+    data = frame.copy()
+    data["target_value"] = 100.0
+    data["score_band"] = pd.cut(
+        data["metric_value"],
+        bins=[-0.001, 39.999, 69.999, 100.0],
+        labels=["较低", "中等", "较高"],
+    ).astype(str)
+    order = frame["metric_name"].tolist()
+    base = alt.Chart(data).encode(
+        y=alt.Y(
+            "metric_name:N",
+            title=None,
+            sort=order,
+            axis=alt.Axis(labelPadding=10),
+        ),
     )
+    background = base.mark_bar(
+        color="#E7ECEA",
+        size=14,
+        cornerRadiusEnd=4,
+    ).encode(
+        x=alt.X(
+            "target_value:Q",
+            title="指标得分",
+            scale=alt.Scale(domain=[0, 100]),
+            axis=alt.Axis(
+                values=[0, 20, 40, 60, 80, 100],
+                grid=False,
+            ),
+        ),
+    )
+    scores = base.mark_bar(
+        size=14,
+        cornerRadiusEnd=4,
+    ).encode(
+        x=alt.X(
+            "metric_value:Q",
+            scale=alt.Scale(domain=[0, 100]),
+        ),
+        color=alt.Color(
+            "score_band:N",
+            scale=alt.Scale(
+                domain=["较低", "中等", "较高"],
+                range=["#B34A42", "#D9A441", "#176B4A"],
+            ),
+            legend=None,
+        ),
+        tooltip=[
+            alt.Tooltip("metric_name:N", title="指标"),
+            alt.Tooltip("metric_value:Q", title="得分", format=".2f"),
+        ],
+    )
+    labels = base.mark_text(
+        align="left",
+        baseline="middle",
+        dx=7,
+        color="#172033",
+        fontSize=11,
+        fontWeight=600,
+    ).encode(
+        x=alt.X("metric_value:Q", scale=alt.Scale(domain=[0, 100])),
+        text=alt.Text("metric_value:Q", format=".1f"),
+    )
+    return (
+        background + scores + labels
+    ).properties(height=225)
+
+
+def _decision_summary_html(
+    selected: pd.Series,
+    view: RecommendationView,
+) -> str:
+    level = str(selected[view.level_field])
+    badge_class = {
+        "推荐": "is-success",
+        "谨慎推荐": "is-warning",
+    }.get(level, "is-neutral")
+    return (
+        '<section class="workbench-decision-summary">'
+        '<div class="workbench-decision-label">综合评价</div>'
+        '<div class="workbench-decision-score">'
+        f"{float(selected[view.score_field]):.2f}"
+        "<small>/ 100</small>"
+        "</div>"
+        '<div class="workbench-decision-meta">'
+        f'<span class="workbench-rank">全局 #{int(selected[view.rank_field])}</span>'
+        f'<span class="workbench-status-badge {badge_class}">'
+        f"{escape(level)}</span>"
+        "</div>"
+        "</section>"
+    )
+
+
+def _render_html(st: Any, content: str) -> None:
+    renderer = getattr(st, "html", None)
+    if callable(renderer):
+        renderer(content)
+        return
+    st.markdown(content, unsafe_allow_html=True)
+
+
+def _render_selected_grid_detail(
+    st: Any,
+    selected: pd.Series,
+    view: RecommendationView,
+) -> None:
+    """Render a compact summary beside the six-dimensional score chart."""
+    breakdown = metric_breakdown_data(
+        selected,
+        synergy_field=view.synergy_field,
+        competition_score_field=view.competition_score_field,
+    )
+    summary_column, chart_column = st.columns([1, 2.4], gap="large")
+    with summary_column:
+        with st.container(border=True):
+            st.markdown("**网格概览**")
+            _render_html(st, _decision_summary_html(selected, view))
+    with chart_column:
+        with st.container(border=True):
+            st.markdown("**六维指标得分**")
+            st.altair_chart(_metric_chart(breakdown), width="stretch")
 
 
 def _render_custom_builder(
@@ -527,25 +628,7 @@ def _render_results(st: Any, view: RecommendationView) -> None:
     selected = all_ranked.loc[
         all_ranked["grid_id"].astype(str).eq(selected_grid)
     ].iloc[0]
-    detail_columns = st.columns(3, gap="medium")
-    detail_columns[0].metric(
-        "综合得分",
-        f"{float(selected[view.score_field]):.2f}",
-    )
-    detail_columns[1].metric(
-        "全局排名",
-        f"{int(selected[view.rank_field])}",
-    )
-    detail_columns[2].metric(
-        "推荐等级",
-        str(selected[view.level_field]),
-    )
-    breakdown = metric_breakdown_data(
-        selected,
-        synergy_field=view.synergy_field,
-        competition_score_field=view.competition_score_field,
-    )
-    st.altair_chart(_metric_chart(breakdown), width="stretch")
+    _render_selected_grid_detail(st, selected, view)
     explanation_columns = st.columns(2, gap="large")
     explanation_columns[0].info(
         f"主要优势：{selected[view.advantage_field]}"
