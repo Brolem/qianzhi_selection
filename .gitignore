@@ -5,6 +5,7 @@ __pycache__/
 
 .vscode/
 data/raw/*
+data/legacy/v1/raw/*
 data/cache/amap/*.json
 outputs/reports/*
 !outputs/reports/.gitkeep
@@ -12,3 +13,4 @@ outputs/results/*
 !outputs/results/.gitkeep
 outputs/figures/*
 !outputs/figures/.gitkeep
+outputs/legacy/v1/*

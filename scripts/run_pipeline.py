@@ -104,7 +104,7 @@ def build_stage_commands(
         stages.append(
             PipelineStage(
                 "official_data",
-                (python, "-m", "src.data.official_pipeline"),
+                (python, "-m", "src.pipeline.official.official_pipeline"),
             )
         )
     if options.refresh_amap:
@@ -112,15 +112,15 @@ def build_stage_commands(
             [
                 PipelineStage(
                     "districts",
-                    (python, "-m", "src.district_builder"),
+                    (python, "-m", "src.pipeline.district_builder"),
                 ),
                 PipelineStage(
                     "grids",
-                    (python, "-m", "src.grid_builder"),
+                    (python, "-m", "src.pipeline.grid_builder"),
                 ),
                 PipelineStage(
                     "poi",
-                    (python, "-m", "src.poi_fetcher"),
+                    (python, "-m", "src.pipeline.poi_fetcher"),
                 ),
             ]
         )
@@ -128,15 +128,15 @@ def build_stage_commands(
         [
             PipelineStage(
                 "feature_engineering",
-                (python, "-m", "src.feature_engineering"),
+                (python, "-m", "src.modeling.feature_engineering"),
             ),
             PipelineStage(
                 "scoring",
-                (python, "-m", "src.scoring_model"),
+                (python, "-m", "src.modeling.scoring_model"),
             ),
             PipelineStage(
                 "maps",
-                (python, "-m", "src.visualization.map_viz"),
+                (python, "-m", "src.presentation.map_viz"),
             ),
         ]
     )
@@ -144,7 +144,7 @@ def build_stage_commands(
         command = [
             python,
             "-m",
-            "src.reporting.report_generator",
+            "src.presentation.report_generator",
             "--profile",
             profile_id,
         ]

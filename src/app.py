@@ -12,13 +12,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from src.app_legacy import (  # noqa: E402
-    business_columns,
-    load_table,
-    map_file_for_business,
-    top_rows,
-)
-from src.pages import (  # noqa: E402
+from src.web.pages import (  # noqa: E402
     data_foundation,
     district_compare,
     grid_recommendation,
@@ -27,9 +21,9 @@ from src.pages import (  # noqa: E402
     project_notes,
     report_center,
 )
-from src.pages.map_insight import render_map_page  # noqa: E402
-from src.pages.report_center import render_report_page  # noqa: E402
-from src.ui.workbench import (  # noqa: E402
+from src.web.pages.map_insight import render_map_page  # noqa: E402
+from src.web.pages.report_center import render_report_page  # noqa: E402
+from src.web.ui.workbench import (  # noqa: E402
     apply_workbench_theme,
     render_brand_bar,
 )

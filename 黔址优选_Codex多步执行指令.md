@@ -293,7 +293,7 @@ README.md
 ```text
 任务 2：统一配置文件。
 
-请完善 config.yaml，并新增 src/config.py。
+请完善 config.yaml，并新增 src/core/config.py。
 
 config.yaml 需要包含：
 
@@ -355,7 +355,7 @@ config.yaml 需要包含：
      competition_pressure
      business_atmosphere
 
-src/config.py 实现：
+src/core/config.py 实现：
 - load_config()
 - get_project_root()
 - get_path(name)
@@ -372,7 +372,7 @@ src/config.py 实现：
 ### 验收命令
 
 ```bash
-python -c "from src.config import load_config, ensure_dirs, get_weights; cfg=load_config(); ensure_dirs(cfg); print(get_weights(cfg, 'convenience'))"
+python -c "from src.core.config import load_config, ensure_dirs, get_weights; cfg=load_config(); ensure_dirs(cfg); print(get_weights(cfg, 'convenience'))"
 ```
 
 ---
@@ -392,7 +392,7 @@ python -c "from src.config import load_config, ensure_dirs, get_weights; cfg=loa
 ```text
 任务 3：新增高德 API 客户端。
 
-新增 src/amap_client.py。
+新增 src/pipeline/amap_client.py。
 
 功能要求：
 
@@ -423,7 +423,7 @@ python -c "from src.config import load_config, ensure_dirs, get_weights; cfg=loa
    - 请求失败：记录日志，不中断全部流程；
    - 返回为空：保存空结果。
 
-6. 新增 tests/test_amap_client.py：
+6. 新增 tests/pipeline/test_amap_client.py：
    - 测试无 AMAP_KEY 时不会崩溃；
    - 测试 cache key 可生成；
    - 测试参数构造正确。
@@ -437,8 +437,8 @@ python -c "from src.config import load_config, ensure_dirs, get_weights; cfg=loa
 ### 验收命令
 
 ```bash
-python -m unittest tests/test_amap_client.py -v
-python -c "from src.amap_client import AmapClient; c=AmapClient(); print('client ok')"
+python -m unittest tests/pipeline/test_amap_client.py -v
+python -c "from src.pipeline.amap_client import AmapClient; c=AmapClient(); print('client ok')"
 ```
 
 ---
@@ -454,7 +454,7 @@ python -c "from src.amap_client import AmapClient; c=AmapClient(); print('client
 ```text
 任务 4：目标区县边界与基础信息。
 
-新增 src/district_builder.py。
+新增 src/pipeline/district_builder.py。
 
 输入：
 - config.yaml 中的 target_districts
@@ -498,7 +498,7 @@ python -c "from src.amap_client import AmapClient; c=AmapClient(); print('client
 ### 验收命令
 
 ```bash
-python src/district_builder.py
+python src/pipeline/district_builder.py
 ```
 
 ---
@@ -514,7 +514,7 @@ python src/district_builder.py
 ```text
 任务 5：生成 1km 候选评价网格。
 
-新增 src/grid_builder.py。
+新增 src/pipeline/grid_builder.py。
 
 输入：
 - data/processed/target_district_boundaries.geojson
@@ -549,7 +549,7 @@ python src/district_builder.py
 ### 验收命令
 
 ```bash
-python src/grid_builder.py
+python src/pipeline/grid_builder.py
 ```
 
 ---
@@ -565,7 +565,7 @@ python src/grid_builder.py
 ```text
 任务 6：网格级 POI 查询与统计。
 
-新增 src/poi_fetcher.py。
+新增 src/pipeline/poi_fetcher.py。
 
 输入：
 - data/processed/candidate_grids.csv
@@ -632,7 +632,7 @@ python src/grid_builder.py
 ### 验收命令
 
 ```bash
-python src/poi_fetcher.py
+python src/pipeline/poi_fetcher.py
 ```
 
 ---
@@ -648,7 +648,7 @@ python src/poi_fetcher.py
 ```text
 任务 7：网格级指标工程。
 
-新增或重构 src/feature_engineering.py。
+新增或重构 src/modeling/feature_engineering.py。
 
 输入：
 - data/processed/grid_poi_counts.csv
@@ -706,7 +706,7 @@ python src/poi_fetcher.py
 ### 验收命令
 
 ```bash
-python src/feature_engineering.py
+python src/modeling/feature_engineering.py
 ```
 
 ---
@@ -722,7 +722,7 @@ python src/feature_engineering.py
 ```text
 任务 8：网格评分与推荐结果。
 
-新增或重构 src/scoring_model.py。
+新增或重构 src/modeling/scoring_model.py。
 
 输入：
 - data/processed/grid_scoring_input.csv
@@ -791,13 +791,13 @@ python src/feature_engineering.py
 ### 验收命令
 
 ```bash
-python src/scoring_model.py
+python src/modeling/scoring_model.py
 ```
 
 自定义方案示例：
 
 ```powershell
-python src/scoring_model.py `
+python src/modeling/scoring_model.py `
   --profile-id custom_retail_01 `
   --profile-name "自定义社区业态" `
   --template community_retail `
@@ -822,8 +822,8 @@ python src/scoring_model.py `
 ```text
 任务 9：地图生成模块。
 
-原地升级 src/visualization/map_viz.py，保留当前模块布局和
-python -m src.visualization.map_viz 入口，不新增重复的 src/map_viz.py。
+原地升级 src/presentation/map_viz.py，保留当前模块布局和
+python -m src.presentation.map_viz 入口，不新增重复的 src/map_viz.py。
 
 输入：
 - outputs/results/grid_stage_score_result.csv
@@ -866,7 +866,7 @@ python -m src.visualization.map_viz 入口，不新增重复的 src/map_viz.py�
 ### 验收命令
 
 ```bash
-python -m src.visualization.map_viz
+python -m src.presentation.map_viz
 ```
 
 ---
@@ -882,8 +882,8 @@ python -m src.visualization.map_viz
 ```text
 任务 10：选址报告生成模块。
 
-实际模块路径为 src/reporting/report_generator.py。
-新增共享评分方案目录 src/profile_catalog.py。
+实际模块路径为 src/presentation/report_generator.py。
+新增共享评分方案目录 src/core/profile_catalog.py。
 
 输入：
 - outputs/results/grid_stage_score_result.csv
@@ -943,7 +943,7 @@ python -m src.visualization.map_viz
 ### 验收命令
 
 ```bash
-python -m src.reporting.report_generator --profile convenience --grid-id grid_520103_000078
+python -m src.presentation.report_generator --profile convenience --grid-id grid_520103_000078
 ```
 
 ---
@@ -981,7 +981,7 @@ python -m src.reporting.report_generator --profile convenience --grid-id grid_52
 
 建议目录：
 src/app.py 作为入口；
-src/pages/
+src/web/pages/
   01_overview.py
   02_data_foundation.py
   district_compare.py
@@ -998,14 +998,14 @@ render_data_foundation()
 禁止：
 - 不要改动评分模型；
 - 不要把所有页面堆在一个长页面；
-- 不要删除旧 app.py，可先备份为 src/app_legacy.py。
+- 不要删除旧 app.py，可先备份为 src/legacy/v1/app.py。
 ```
 
 ### 当前实际实施
 
 - 当前 Streamlit 版本为 `1.58.0`，正式入口使用 `st.Page` 和 `st.navigation`，并保留 sidebar radio 回退。
-- Step 11 最初建立八页结构；Step 13–15 实施时删除职责重复的独立“选址分析”页，当前 `src/app.py` 负责宽屏配置、七页注册和导航；原入口保留为 `src/app_legacy.py`。
-- 页面模块实际位于 `src/pages/`，文件名采用无数字前缀的 Python 模块名，并通过稳定的页面注册顺序控制导航。
+- Step 11 最初建立八页结构；Step 13–15 实施时删除职责重复的独立“选址分析”页，当前 `src/app.py` 负责宽屏配置、七页注册和导航；原入口保留为 `src/legacy/v1/app.py`。
+- 页面模块实际位于 `src/web/pages/`，文件名采用无数字前缀的 Python 模块名，并通过稳定的页面注册顺序控制导航。
 - “网格推荐”“地图洞察”和“智能报告”使用各页面独立评分方案选择器，不保留全局固定业态侧栏。
 - 项目总览增加真实 POI 和得分图表；区域对比展示原始 POI 分组统计；网格推荐统一承载自定义权重和即时评分。
 - 地图和报告页面迁移后继续兼容 Step 9–10 的默认、自定义方案、静态回退、会话缓存和模板报告行为。
@@ -1070,7 +1070,7 @@ streamlit run src/app.py
 
 ### 当前实施状态
 
-- 实际共享视觉模块为 `src/ui/workbench.py`，主题配置为 `.streamlit/config.toml`。
+- 实际共享视觉模块为 `src/web/ui/workbench.py`，主题配置为 `.streamlit/config.toml`。
 - `src/app.py` 在运行七页导航前统一加载主题和标题栏，未隐藏 Streamlit 原生工具栏。
 - 首页四项主指标读取真实数据与配置，当前为 3 个目标区县、790 个空间评价网格、15 类 POI 和 41 个活跃推荐网格；60 个采样网格和 3 套有效评分方案作为辅助信息展示。
 - 标题栏桌面端居中显示并使用 24px 字号，窄屏下固定缩小字号和间距。
@@ -1239,7 +1239,7 @@ streamlit run src/app.py
 输入：
 - outputs/figures/convenience_grid_map.html
 - outputs/figures/light_food_grid_map.html
-或由 src/visualization/map_viz.py 动态生成。
+或由 src/presentation/map_viz.py 动态生成。
 
 页面功能：
 1. 选择业态：
@@ -1286,7 +1286,7 @@ streamlit run src/app.py
 - outputs/results/grid_stage_score_result.csv
 - outputs/results/profile_metadata.json
 - outputs/results/custom_profiles/<profile_id>/
-- src/reporting/report_generator.py
+- src/presentation/report_generator.py
 
 页面流程：
 1. 选择评分方案：
@@ -1326,7 +1326,7 @@ streamlit run src/app.py
 
 ### 当前实际实施
 
-- 页面模块为 `src/pages/report_center.py`，报告引擎为 `src/reporting/report_generator.py`，不使用总控旧示例中的根目录模块路径。
+- 页面模块为 `src/web/pages/report_center.py`，报告引擎为 `src/presentation/report_generator.py`，不使用总控旧示例中的根目录模块路径。
 - 页面使用独立评分方案选择器，支持默认社区便利店、默认轻餐饮和有效自定义评分方案；只列出有 POI 活动且具有有效排名的网格。
 - 页面仅在用户点击“生成智能报告”后调用 DeepSeek，并按评分方案和网格写入 Streamlit 会话状态，页面刷新不会重复调用。
 - 默认使用 `deepseek-v4-pro` 非思考模式；仅连接、超时、限流、服务端错误或模型不可用时回退 `deepseek-v4-flash`。鉴权、余额、请求参数和输入数据错误直接展示，不通过模板或切换模型伪装成功。
@@ -1339,7 +1339,7 @@ streamlit run src/app.py
 
 ```powershell
 $env:DEEPSEEK_API_KEY = [Environment]::GetEnvironmentVariable("DEEPSEEK_API_KEY", "User")
-python -m unittest tests.test_report_generator tests.test_app -v
+python -m unittest tests.presentation.test_report_generator tests.web.test_app -v
 streamlit run src/app.py
 ```
 
@@ -1360,9 +1360,9 @@ streamlit run src/app.py
 
 默认离线流程：
 1. 校验 Step 4–6 已跟踪输入。
-2. `python -m src.feature_engineering`
-3. `python -m src.scoring_model`
-4. `python -m src.visualization.map_viz`
+2. `python -m src.modeling.feature_engineering`
+3. `python -m src.modeling.scoring_model`
+4. `python -m src.presentation.map_viz`
 5. 为便利店和轻餐饮 Top 1 生成规则模板报告。
 6. 验收区县、网格、评分、地图和报告。
 7. 写出 `outputs/results/pipeline_run_summary.md`。
@@ -1418,9 +1418,9 @@ python scripts/run_pipeline.py --serve
 总控早期示例中的 `src/data_process.py`、`src/map_viz.py` 和 `src/report_generator.py` 不符合当前模块布局。实际入口分别为：
 
 ```text
-src.data.official_pipeline
-src.visualization.map_viz
-src.reporting.report_generator
+src.pipeline.official.official_pipeline
+src.presentation.map_viz
+src.presentation.report_generator
 ```
 
 默认运行不重新调用外部 API，保证比赛交付可重复；在线刷新和 DeepSeek 报告必须显式启用。
@@ -1507,7 +1507,29 @@ Markdown 报告
 
 ---
 
-# 8. 参考资料
+# 8. 当前仓库结构边界
+
+完成 Step 18 后，仓库按职责重组：
+
+- 当前配置与评分方案：`src/core/`
+- 当前数据管线：`src/pipeline/`
+- 当前指标与评分：`src/modeling/`
+- 当前地图与报告：`src/presentation/`
+- 当前工作台页面与视觉组件：`src/web/`
+- v1 可运行归档：`src/legacy/v1/`
+
+当前稳定入口保持为：
+
+```powershell
+python scripts/run_pipeline.py
+streamlit run src/app.py
+```
+
+v1 使用独立配置、数据和输出目录，不参与当前默认入口。详细说明见 `docs/项目结构说明.md` 和 `docs/legacy/v1/README.md`。
+
+---
+
+# 9. 参考资料
 
 1. 高德开放平台 POI 2.0 高级 API 文档：  
    https://lbs.amap.com/api/webservice/guide/api-advanced/newpoisearch
@@ -1532,6 +1554,6 @@ Markdown 报告
 
 ---
 
-# 9. 最终一句话
+# 10. 最终一句话
 
 后续让 Codex 执行时，不要一次性丢全部内容；应该按 Step 0 → Step 1 → Step 2 的顺序逐步推进，每一步验收通过后再继续。
