@@ -29,13 +29,14 @@ v2 已完成的基础数据链路包括：
 - 社区便利店与轻餐饮的默认差异化评分、全局/区县排名和推荐等级。
 - 基于六维权重与两类指标模板的自定义评分方案命令行入口。
 - 基于 790 个空间网格的便利店与轻餐饮评分地图，以及自定义评分方案动态地图。
-- 基于 Step 8 正式结果的 DeepSeek 智能选址报告，支持默认与自定义评分方案。
+- 基于 Step 8 正式结果的 DeepSeek 智能选址报告，支持默认与自定义评分方案；模型生成结构化分析 JSON，程序校验证据字段后写入真实数值并渲染 11 章 Markdown。
 - 基于 `st.Page` 和 `st.navigation` 的七页 Streamlit 工作台，并保留旧版本 sidebar radio 回退。
 - 基于共享 UI 模块和 `.streamlit/config.toml` 的紧凑运营台视觉系统。
 - 首页五类 POI 主题摘要、活跃网格区县平均得分对比图和区域 POI 原始数量对比图。
 - 网格推荐页的六项权重预算、即时评分、正式方案保存和单网格六维分解。
+- Step 18 离线一键复现、按需在线刷新、输出验收和运行摘要。
 
-当前工作台包含项目总览、数据底座、区域对比、网格推荐、地图洞察、智能报告和项目说明。原“选址分析”与“网格推荐”职责重复，Step 13 已调整为决策流程整合并入 Step 15，不再保留独立页面。Step 14 已补充区县背景图表，Step 15 已统一承载默认方案、已保存自定义方案、新建方案、即时评分和推荐结果。Step 17 智能报告页已完成正式验收；Step 16 地图页已具备核心能力，尚待补充区县筛选。
+当前工作台包含项目总览、数据底座、区域对比、网格推荐、地图洞察、智能报告和项目说明。原“选址分析”与“网格推荐”职责重复，Step 13 已调整为决策流程整合并入 Step 15，不再保留独立页面。Step 14 已补充区县背景图表，Step 15 已统一承载默认方案、已保存自定义方案、新建方案、即时评分和推荐结果。Step 16 地图页和 Step 17 智能报告页均已完成当前交付范围内的核心能力。
 
 ## 3. 目标区县与业务对象
 
@@ -71,6 +72,8 @@ docs/初赛方案_新版.md
 docs/技术路线草图.md
 docs/项目执行计划.md
 docs/推荐项目方案.md
+docs/最终交付清单.md
+docs/5分钟演示脚本.md
 ```
 
 旧版文档已归档到：
@@ -94,6 +97,8 @@ qianzhi_selection/
 │   ├── figures/
 │   ├── reports/
 │   └── results/
+├── scripts/
+│   └── run_pipeline.py
 ├── src/
 │   ├── data/
 │   ├── osm/
@@ -143,13 +148,57 @@ outputs/figures/light_food_grid_map.html
 
 ## 7. 当前运行方式
 
-安装依赖：
+已验证运行环境为 Python `3.13.12`。安装锁定依赖：
 
 ```powershell
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
 python -m pip install -r requirements.txt
 ```
+
+默认离线复现使用仓库已跟踪的 60 个真实 POI 样本网格，不调用高德或 DeepSeek：
+
+```powershell
+python scripts/run_pipeline.py
+```
+
+该命令依次重建指标工程、两类默认评分、两张地图和两份 Top 1 模板报告，并生成：
+
+```text
+outputs/results/pipeline_run_summary.md
+```
+
+可选在线阶段：
+
+```powershell
+# 重新处理六个官方 Excel
+python scripts/run_pipeline.py --refresh-official
+
+# 在线刷新三区边界、空间网格和三区各20个POI样本网格
+python scripts/run_pipeline.py --refresh-amap
+
+# 使用 DeepSeek 生成两类 Top 1 报告
+python scripts/run_pipeline.py --with-llm
+
+# 验收成功后在 0.0.0.0:8501 启动工作台
+python scripts/run_pipeline.py --serve
+```
+
+参数可以组合。`--serve` 固定使用端口 `8501`；端口被占用时停止并提示，不自动启动第二个服务。
+
+Windows 当前用户环境变量：
+
+```powershell
+[Environment]::SetEnvironmentVariable("AMAP_KEY", "<高德Web服务Key>", "User")
+[Environment]::SetEnvironmentVariable("AMAP_JS_KEY", "<高德JS API Key>", "User")
+[Environment]::SetEnvironmentVariable("AMAP_JS_SECURITY_CODE", "<高德JS安全密钥>", "User")
+[Environment]::SetEnvironmentVariable("DEEPSEEK_API_KEY", "<DeepSeek API Key>", "User")
+```
+
+- `AMAP_KEY` 仅在 `--refresh-amap` 时必须配置。
+- `DEEPSEEK_API_KEY` 仅在 `--with-llm` 或前端生成智能报告时必须配置。
+- 高德 JS 凭据缺失时，地图生成和地图页使用 Folium 兼容回退。
+- 所有凭据只从环境变量读取，不写入仓库、日志或运行摘要。
 
 运行 legacy 数据链路：
 
@@ -160,8 +209,6 @@ python -m src.osm.pipeline --no-download
 python -m src.selection.two_stage --top-n 5 --grid-size-m 1000
 python -m src.visualization.map_viz
 ```
-
-v2 一键流程将在后续实施 `docs/项目执行计划.md` 后补齐。
 
 运行 v2 默认评分：
 
@@ -210,6 +257,8 @@ python -m src.reporting.report_generator `
 
 `--profile` 支持 `convenience`、`light_food` 和 `outputs/results/custom_profiles/` 下具有有效 `profile_metadata.json` 的方案标识。报告默认写入 `outputs/reports/<profile_id>/`。
 
+智能报告采用结构化生成链路：DeepSeek 只输出不含自行计算数值的分析文字、证据字段和经营建议，程序校验指标来源、竞争方向、禁写内容和四项质量检查，再从评分结果写入真实分数、排名、权重与边界说明并渲染 Markdown。JSON 空响应只使用同一模型重试一次；格式、证据或内容校验失败不会通过切换模型掩盖。
+
 启动七页 Streamlit 工作台：
 
 ```powershell
@@ -222,7 +271,7 @@ streamlit run src/app.py
 
 ```bash
 python -m unittest discover -s tests -v
-python -c "import ast, pathlib; [ast.parse(p.read_text(encoding='utf-8'), filename=str(p)) for p in pathlib.Path('src').rglob('*.py')]; print('syntax ok')"
+python -c "import ast, pathlib; [ast.parse(p.read_text(encoding='utf-8'), filename=str(p)) for p in pathlib.Path('src').rglob('*.py')]; ast.parse(pathlib.Path('scripts/run_pipeline.py').read_text(encoding='utf-8')); print('syntax ok')"
 ```
 
 文档检查：
@@ -235,13 +284,15 @@ rg -n "全量高德|精准盈利|真实租金|真实客流|门牌号级" README.
 
 ## 9. 当前限制
 
-- v2 当前已完成区县边界、空间网格、60 网格 POI 样本、指标工程、Step 8 网格评分、Step 9 地图生成、Step 10 DeepSeek 智能报告、Step 11 多页工作台架构、Step 12 统一视觉系统、Step 13–15 页面去重与交互增强及 Step 17 智能报告页面验收。
+- v2 当前已完成区县边界、空间网格、60 网格 POI 样本、指标工程、评分、地图、结构化智能报告、七页工作台和 Step 18 一键复现与最终交付链路。
 - 60 网格 POI 统计采用统一关键词口径，适合相对比较，不代表完整 POI 总量。
 - 19 个全零样本网格保留用于审计，评分结果将其得分固定为 0 且不进入排名。
 - 自定义权重只改变现有六维指标贡献；新增正式业态仍需补充对应 POI 和指标模板。
-- 七个工作台页面均已切换到 v2 口径并采用统一视觉样式；Step 17 已支持方案选择、活跃网格筛选、按钮触发、会话缓存、模型状态、模板兜底、Markdown 预览与下载。Step 16 后续只需补充区县筛选。
+- 七个工作台页面均已切换到 v2 口径并采用统一视觉样式；地图页支持方案切换、高德主链与兼容回退，报告页支持活跃网格筛选、按钮触发、会话缓存、模型状态、模板兜底、Markdown 预览与下载。
 - 高德 JS API 2.0 是地图主链，直接使用 GCJ-02 边界、网格和中心点；Folium 仅作为无 JS 凭据或用户主动选择时的兼容回退，并在回退路径临时转换为 WGS84。
 - 高德 Web 服务继续读取 `AMAP_KEY`；地图页面另行读取用户级 `AMAP_JS_KEY` 与 `AMAP_JS_SECURITY_CODE`。三项凭据均不得写入仓库文件。
 - 当前未接入工商主体、信用、租赁、实时客流、停车条件和门店经营流水数据。
 - 官方宏观经济与就业数据只用于背景说明，不硬拆到 1km 评价网格。
 - 官方数据当前真实地域范围为贵州省级，只用于报告中的市场背景和适用边界，不参与网格评分，也不用于制造区县差异。
+- 默认一键流程复现当前 60 网格样本，不重新调用高德；只有显式使用 `--refresh-amap` 才会在线刷新。
+- `outputs/results/`、`outputs/reports/` 和地图 HTML 属于运行生成文件，交付前应按 `docs/最终交付清单.md` 重新验收。

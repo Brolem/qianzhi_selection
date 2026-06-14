@@ -917,8 +917,14 @@ python -m src.visualization.map_viz
 
 要求：
 - 默认读取 DEEPSEEK_API_KEY 并使用 deepseek-v4-pro 非思考模式；
+- 使用 DeepSeek JSON Output 生成结构化分析素材，不要求模型直接输出 Markdown；
+- 结构化结果必须包含 11 个章节分析、真实证据字段、经营建议依据和四项质量检查；
+- Python 校验结构、证据字段、竞争方向和禁写内容后，从真实评分记录写入数值并渲染 Markdown；
+- 模型分析文字不得自行复述或计算数值；
+- 交通可达性只解释公交站、地铁站和停车场 POI，不扩展为路网密度或道路等级；
+- JSON 空响应使用同一模型重试一次；
 - Pro 仅在连接、超时、限流、服务端错误或模型不可用时回退 deepseek-v4-flash；
-- 鉴权、余额、请求格式、参数和输入数据错误不得回退；
+- 鉴权、余额、请求格式、参数、输入数据和内容质量错误不得回退；
 - CLI 可通过 --template 明确使用规则模板；
 - 支持 convenience、light_food 和有效自定义评分方案；
 - 只为有 POI 活动且具有有效排名的网格生成报告；
@@ -1350,17 +1356,24 @@ streamlit run src/app.py
 ```text
 任务 18：一键运行脚本和最终验收。
 
-新增 scripts/run_pipeline.py 或 run_pipeline.bat。
+新增 `scripts/run_pipeline.py`。
 
-一键流程：
-1. python src/data_process.py
-2. python src/district_builder.py
-3. python src/grid_builder.py
-4. python src/poi_fetcher.py
-5. python src/feature_engineering.py
-6. python src/scoring_model.py
-7. python src/map_viz.py
-8. python src/report_generator.py
+默认离线流程：
+1. 校验 Step 4–6 已跟踪输入。
+2. `python -m src.feature_engineering`
+3. `python -m src.scoring_model`
+4. `python -m src.visualization.map_viz`
+5. 为便利店和轻餐饮 Top 1 生成规则模板报告。
+6. 验收区县、网格、评分、地图和报告。
+7. 写出 `outputs/results/pipeline_run_summary.md`。
+
+可选参数：
+- `--refresh-official`：重新处理六个官方 Excel。
+- `--refresh-amap`：要求 `AMAP_KEY`，刷新三区边界、网格和三区各 20 个 POI 样本网格。
+- `--with-llm`：要求 `DEEPSEEK_API_KEY`，生成两类 Top 1 DeepSeek 报告。
+- `--serve`：验收成功后在 `0.0.0.0:8501` 启动 Streamlit；端口占用时停止，不启动第二个实例。
+
+所有模块使用 `sys.executable -m` 调用。任一阶段失败后停止后续阶段，运行摘要不得包含密钥值。
 
 更新 README.md：
 - 环境安装
@@ -1370,6 +1383,8 @@ streamlit run src/app.py
 - Streamlit 启动命令
 - 输出文件说明
 - 当前限制
+
+锁定当前已验证的 Python 和依赖版本。
 
 新增 docs/最终交付清单.md：
 - 数据文件
@@ -1395,8 +1410,20 @@ streamlit run src/app.py
 
 ```bash
 python scripts/run_pipeline.py
-streamlit run src/app.py
+python scripts/run_pipeline.py --serve
 ```
+
+### 实际实现说明
+
+总控早期示例中的 `src/data_process.py`、`src/map_viz.py` 和 `src/report_generator.py` 不符合当前模块布局。实际入口分别为：
+
+```text
+src.data.official_pipeline
+src.visualization.map_viz
+src.reporting.report_generator
+```
+
+默认运行不重新调用外部 API，保证比赛交付可重复；在线刷新和 DeepSeek 报告必须显式启用。
 
 ---
 

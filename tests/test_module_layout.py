@@ -1,6 +1,8 @@
 import importlib
 from pathlib import Path
+import tempfile
 import unittest
+from unittest.mock import patch
 
 
 class ModuleLayoutTests(unittest.TestCase):
@@ -61,6 +63,28 @@ class ModuleLayoutTests(unittest.TestCase):
         for path in redundant_files:
             with self.subTest(path=str(path)):
                 self.assertFalse(path.exists())
+
+    def test_official_report_uses_v2_background_scope(self):
+        module = importlib.import_module("src.data.official_pipeline")
+        profiles = {
+            "测试文件.xlsx": {
+                "shape": (1, 1),
+                "duplicate_rows": 0,
+            }
+        }
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            with patch.object(module, "REPORTS_DIR", Path(tmp_dir)):
+                path = module.write_identification_report(
+                    profiles=profiles,
+                    id_overlap=0,
+                    macro_area_codes=[520000],
+                    reference_area_codes=[520000],
+                )
+            content = path.read_text(encoding="utf-8")
+
+        self.assertIn("贵州省级市场背景", content)
+        self.assertIn("不参与 1km 网格评分", content)
+        self.assertNotIn("当前推荐主线采用两阶段空间选址", content)
 
 
 if __name__ == "__main__":

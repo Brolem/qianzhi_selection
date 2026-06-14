@@ -1,3 +1,4 @@
+import json
 import os
 import tempfile
 import unittest
@@ -92,23 +93,93 @@ def write_result(path: Path, active: bool = True, custom: bool = False) -> Path:
     return path
 
 
-def valid_report() -> str:
-    headings = [
-        "## 一、评价网格基本信息",
-        "## 二、适配业态与推荐等级",
-        "## 三、交通可达性分析",
-        "## 四、消费潜力分析",
-        "## 五、就业/办公客群代理分析",
-        "## 六、共生业态分析",
-        "## 七、竞争压力分析",
-        "## 八、商业氛围与权重方案",
-        "## 九、主要优势与风险",
-        "## 十、经营建议",
-        "## 十一、数据来源与限制说明",
-    ]
-    return "# 智能选址报告\n\n" + "\n\n".join(
-        f"{heading}\n\n测试内容。" for heading in headings
-    )
+def valid_analysis_payload() -> dict:
+    return {
+        "schema_version": "1.0",
+        "sections": {
+            "basic_information": {
+                "analysis": "该网格具备完整的基础评价信息，可进入后续研判。",
+                "evidence_fields": [
+                    "grid.district_name",
+                    "grid.poi_total_count",
+                ],
+            },
+            "business_fit": {
+                "analysis": "当前方案下的推荐等级与相对排名表现较好。",
+                "evidence_fields": [
+                    "profile.profile_name",
+                    "recommendation.level",
+                    "recommendation.global_rank",
+                ],
+            },
+            "traffic_accessibility": {
+                "analysis": "交通配套类兴趣点形成了较强的相对支撑。",
+                "evidence_fields": ["metrics.traffic_accessibility"],
+            },
+            "consumption_potential": {
+                "analysis": "生活服务设施对日常消费需求形成较强支撑。",
+                "evidence_fields": ["metrics.consumption_potential"],
+            },
+            "employment_customer_proxy": {
+                "analysis": "办公与活动场景类兴趣点可提供客群代理支撑。",
+                "evidence_fields": ["metrics.employment_customer_proxy"],
+            },
+            "synergy": {
+                "analysis": "相关配套业态具有较好的相对协同条件。",
+                "evidence_fields": ["metrics.synergy_score"],
+            },
+            "competition": {
+                "analysis": "同类设施集聚带来竞争风险，需要结合现场经营状态核验。",
+                "evidence_fields": [
+                    "metrics.competition_pressure",
+                    "metrics.competition_score",
+                ],
+            },
+            "business_atmosphere": {
+                "analysis": "商业设施集聚度与当前方案权重共同支撑综合评价。",
+                "evidence_fields": [
+                    "metrics.business_atmosphere",
+                    "profile.weights",
+                ],
+            },
+            "strengths_and_risks": {
+                "analysis": "主要优势较突出，同时应重点核验已识别风险。",
+                "evidence_fields": [
+                    "recommendation.main_advantage",
+                    "recommendation.main_risk",
+                ],
+            },
+            "operating_suggestions": {
+                "items": [
+                    {
+                        "suggestion": "优先核验主要优势对应设施的实际可达性与稳定性。",
+                        "basis_fields": ["recommendation.main_advantage"],
+                    },
+                    {
+                        "suggestion": "通过现场踏勘确认同类门店经营状态及租金条件。",
+                        "basis_fields": ["recommendation.main_risk"],
+                    },
+                ],
+            },
+            "limitations": {
+                "analysis": "结论仅用于统一样本口径下的相对比较，仍需现场调研。",
+                "evidence_fields": [
+                    "official_data.scope",
+                    "method_boundaries",
+                ],
+            },
+        },
+        "quality_check": {
+            "all_claims_grounded": True,
+            "competition_direction_checked": True,
+            "no_unsupported_predictions": True,
+            "all_sections_complete": True,
+        },
+    }
+
+
+def valid_analysis_json() -> str:
+    return json.dumps(valid_analysis_payload(), ensure_ascii=False)
 
 
 class FakeCompletion:
@@ -146,7 +217,7 @@ class ReportGeneratorTests(unittest.TestCase):
     def test_deepseek_pro_uses_non_thinking_mode_and_v2_fields(self):
         with tempfile.TemporaryDirectory() as tmp_dir:
             result_path = write_result(Path(tmp_dir) / "result.csv")
-            client = FakeClient([valid_report()])
+            client = FakeClient([valid_analysis_json()])
 
             result = report_generator.generate_site_report(
                 "grid_520103_000078",
@@ -160,6 +231,23 @@ class ReportGeneratorTests(unittest.TestCase):
             call = client.chat.completions.calls[0]
             self.assertEqual(call["model"], "deepseek-v4-pro")
             self.assertEqual(call["extra_body"], {"thinking": {"type": "disabled"}})
+            self.assertEqual(
+                call["response_format"],
+                {"type": "json_object"},
+            )
+            system_prompt = call["messages"][0]["content"]
+            for text in [
+                "<metric_dictionary>",
+                "公交站、地铁站、停车场",
+                "低竞争得分 = 100 - 竞争压力",
+                "<evidence_rules>",
+                "<allowed_evidence_fields>",
+                '"business_fit"',
+                '"profile.weights"',
+                "<output_schema>",
+                "JSON",
+            ]:
+                self.assertIn(text, system_prompt)
             prompt = call["messages"][1]["content"]
             for text in [
                 "grid_520103_000078",
@@ -170,6 +258,87 @@ class ReportGeneratorTests(unittest.TestCase):
                 "不参与网格评分",
             ]:
                 self.assertIn(text, prompt)
+            self.assertIn("# 云岩区 社区便利店选址报告", result.content)
+            self.assertIn("综合得分：83.00", result.content)
+            self.assertIn("竞争压力：31.00", result.content)
+            self.assertIn("低竞争得分：69.00", result.content)
+            self.assertIn(
+                "交通配套类兴趣点形成了较强的相对支撑。",
+                result.content,
+            )
+
+    def test_analysis_json_requires_valid_evidence_and_quality_checks(self):
+        payload = valid_analysis_payload()
+        payload["sections"]["traffic_accessibility"]["evidence_fields"] = [
+            "metrics.road_density"
+        ]
+        with self.assertRaisesRegex(
+            report_generator.InvalidReportContentError,
+            "traffic_accessibility.*metrics.road_density",
+        ):
+            report_generator.validate_report_analysis(
+                json.dumps(payload, ensure_ascii=False)
+            )
+
+        payload = valid_analysis_payload()
+        payload["quality_check"]["competition_direction_checked"] = False
+        with self.assertRaisesRegex(
+            report_generator.InvalidReportContentError,
+            "competition_direction_checked",
+        ):
+            report_generator.validate_report_analysis(
+                json.dumps(payload, ensure_ascii=False)
+            )
+
+    def test_analysis_json_rejects_model_written_numbers_and_unsupported_claims(self):
+        for analysis in [
+            "交通可达性达到八十二分。",
+            "该网格路网密度较高。",
+            "建议优先选择社区出入口的具体铺位。",
+        ]:
+            with self.subTest(analysis=analysis):
+                payload = valid_analysis_payload()
+                payload["sections"]["traffic_accessibility"][
+                    "analysis"
+                ] = analysis
+                with self.assertRaises(
+                    report_generator.InvalidReportContentError
+                ):
+                    report_generator.validate_report_analysis(
+                        json.dumps(payload, ensure_ascii=False)
+                    )
+
+    def test_limitations_section_may_state_explicit_method_boundaries(self):
+        payload = valid_analysis_payload()
+        payload["sections"]["limitations"]["analysis"] = (
+            "结论不提供门牌号或具体铺位推荐，相关条件需现场核验。"
+        )
+
+        result = report_generator.validate_report_analysis(
+            json.dumps(payload, ensure_ascii=False)
+        )
+
+        self.assertIn(
+            "具体铺位",
+            result["sections"]["limitations"]["analysis"],
+        )
+
+    def test_empty_content_retries_same_model_once_without_flash(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            result_path = write_result(Path(tmp_dir) / "result.csv")
+            client = FakeClient(["", valid_analysis_json()])
+
+            result = report_generator.generate_site_report(
+                "grid_520103_000078",
+                make_profile(result_path),
+                llm_client=client,
+            )
+
+            self.assertFalse(result.used_fallback)
+            self.assertEqual(
+                [call["model"] for call in client.chat.completions.calls],
+                ["deepseek-v4-pro", "deepseek-v4-pro"],
+            )
 
     def test_retryable_primary_errors_use_flash_once(self):
         import httpx
@@ -188,7 +357,7 @@ class ReportGeneratorTests(unittest.TestCase):
             with self.subTest(error=type(error).__name__, status=getattr(error, "status_code", None)):
                 with tempfile.TemporaryDirectory() as tmp_dir:
                     result_path = write_result(Path(tmp_dir) / "result.csv")
-                    client = FakeClient([error, valid_report()])
+                    client = FakeClient([error, valid_analysis_json()])
 
                     result = report_generator.generate_site_report(
                         "grid_520103_000078",
@@ -220,7 +389,10 @@ class ReportGeneratorTests(unittest.TestCase):
     def test_invalid_model_content_stops_without_flash(self):
         with tempfile.TemporaryDirectory() as tmp_dir:
             result_path = write_result(Path(tmp_dir) / "result.csv")
-            for content in ["", "## 一、评价网格基本信息\n\n不完整"]:
+            for content in [
+                "不是 JSON",
+                json.dumps({"schema_version": "1.0"}, ensure_ascii=False),
+            ]:
                 with self.subTest(content=content):
                     client = FakeClient([content])
                     with self.assertRaises(report_generator.InvalidReportContentError):
