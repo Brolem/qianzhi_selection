@@ -9,8 +9,14 @@ from src.web.pages.common import (
     load_required_csv,
     profile_top_rows,
 )
-from src.web.pages.data_foundation import build_data_foundation_rows
-from src.web.pages.district_compare import load_district_comparison
+from src.web.pages.data_foundation import (
+    build_data_foundation_rows,
+    format_data_foundation_table,
+)
+from src.web.pages.district_compare import (
+    format_district_summary_table,
+    load_district_comparison,
+)
 from src.web.pages.district_compare import (
     _grouped_bar_chart,
     build_district_poi_comparison,
@@ -26,8 +32,10 @@ from src.web.pages.grid_recommendation import (
     ranked_recommendation_rows,
 )
 from src.web.pages.overview import (
+    _coverage_funnel_html,
     _poi_theme_chart,
     _score_average_chart,
+    build_coverage_funnel_data,
     build_poi_theme_summary_data,
     build_score_average_data,
     build_score_distribution_data,
@@ -61,6 +69,32 @@ def write_csv(path: Path, rows: list[dict]) -> Path:
 
 
 class WorkbenchPageTests(unittest.TestCase):
+    def test_coverage_funnel_uses_spatial_sample_and_active_counts(self):
+        stages = build_coverage_funnel_data(
+            {
+                "spatial_grid_count": 790,
+                "poi_sample_grid_count": 60,
+                "active_grid_count": 41,
+            }
+        )
+        content = _coverage_funnel_html(stages)
+
+        self.assertEqual(
+            stages[["stage", "count"]].to_dict("records"),
+            [
+                {"stage": "空间评价网格", "count": 790},
+                {"stage": "已采集样本网格", "count": 60},
+                {"stage": "活跃评分网格", "count": 41},
+            ],
+        )
+        self.assertAlmostEqual(stages.iloc[1]["rate_from_previous"], 60 / 790)
+        self.assertAlmostEqual(stages.iloc[2]["rate_from_previous"], 41 / 60)
+        self.assertIn("790", content)
+        self.assertIn("60", content)
+        self.assertIn("41", content)
+        self.assertIn("7.6%", content)
+        self.assertIn("68.3%", content)
+
     def test_weight_budget_html_uses_progress_and_compact_status_items(self):
         content = _weight_budget_html(
             total=Decimal("96.00"),
@@ -202,6 +236,13 @@ class WorkbenchPageTests(unittest.TestCase):
             self.assertEqual(rows[2]["geographic_scope"], "贵州省级背景")
             self.assertEqual(rows[3]["geographic_scope"], "贵州省级背景")
 
+            display = format_data_foundation_table(rows)
+            self.assertEqual(
+                display.columns.tolist(),
+                ["数据资产", "记录数", "地域范围", "数据角色", "坐标与口径"],
+            )
+            self.assertEqual(display.iloc[0]["数据资产"], "目标区县基础信息")
+
     def test_profile_top_rows_filters_activity_district_and_rank(self):
         with tempfile.TemporaryDirectory() as tmp_dir:
             result_path = write_csv(
@@ -260,6 +301,21 @@ class WorkbenchPageTests(unittest.TestCase):
 
             self.assertEqual(result["district_name"].tolist(), ["甲区"])
             self.assertEqual(result["active_grid_count"].tolist(), [12])
+            display = format_district_summary_table(result)
+            self.assertEqual(
+                display.columns.tolist(),
+                [
+                    "区县",
+                    "网格数",
+                    "活跃网格数",
+                    "POI 总量",
+                    "便利店平均分",
+                    "便利店最高分网格",
+                    "轻餐饮平均分",
+                    "轻餐饮最高分网格",
+                ],
+            )
+            self.assertEqual(display.iloc[0]["便利店平均分"], 50.0)
 
     def test_overview_chart_data_uses_exact_themes_and_active_scores(self):
         with tempfile.TemporaryDirectory() as tmp_dir:

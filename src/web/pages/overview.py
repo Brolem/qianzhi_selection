@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from html import escape
 from typing import Any
 
 import altair as alt
@@ -22,6 +23,7 @@ from src.core.config import get_poi_categories
 from src.core.profile_catalog import ResultProfileSpec
 from src.web.ui.workbench import (
     render_inline_legend,
+    render_html,
     render_metric_cards,
     render_page_header,
 )
@@ -195,6 +197,49 @@ def build_score_average_data(
     )
 
 
+def build_coverage_funnel_data(metrics: dict[str, int]) -> pd.DataFrame:
+    """Build the three-stage data-coverage path used by the homepage."""
+    counts = [
+        int(metrics["spatial_grid_count"]),
+        int(metrics["poi_sample_grid_count"]),
+        int(metrics["active_grid_count"]),
+    ]
+    if counts[0] <= 0 or any(count < 0 for count in counts):
+        raise ValueError("数据覆盖漏斗的网格数量必须有效")
+    rates = [1.0]
+    for previous, current in zip(counts, counts[1:]):
+        rates.append(current / previous if previous else 0.0)
+    return pd.DataFrame(
+        {
+            "stage": ["空间评价网格", "已采集样本网格", "活跃评分网格"],
+            "count": counts,
+            "rate_from_previous": rates,
+        }
+    )
+
+
+def _coverage_funnel_html(frame: pd.DataFrame) -> str:
+    """Render the coverage path as three compact decision stages."""
+    cards: list[str] = []
+    for index, row in frame.reset_index(drop=True).iterrows():
+        if index:
+            cards.append('<div class="workbench-coverage-arrow">›</div>')
+        rate_note = (
+            "完整空间底板"
+            if index == 0
+            else f"上一步转化率 {float(row['rate_from_previous']):.1%}"
+        )
+        active_class = " is-active" if index == len(frame) - 1 else ""
+        cards.append(
+            f'<article class="workbench-coverage-stage{active_class}">'
+            f'<div class="workbench-coverage-label">{escape(str(row["stage"]))}</div>'
+            f'<div class="workbench-coverage-value">{int(row["count"])}</div>'
+            f'<div class="workbench-coverage-note">{escape(rate_note)}</div>'
+            "</article>"
+        )
+    return '<section class="workbench-coverage-funnel">' + "".join(cards) + "</section>"
+
+
 def _poi_theme_chart(frame: pd.DataFrame) -> alt.Chart:
     theme_order = [
         theme["label"] for theme in POI_THEME_GROUPS.values()
@@ -352,6 +397,11 @@ def render(st_module: Any | None = None) -> None:
     st.caption(
         f"当前已采集 {metrics['poi_sample_grid_count']} 个样本网格，"
         f"可用评分方案 {metrics['profile_count']} 套。"
+    )
+    st.markdown("**数据覆盖路径**")
+    render_html(
+        st,
+        _coverage_funnel_html(build_coverage_funnel_data(metrics)),
     )
     try:
         theme_data = build_poi_theme_summary_data()

@@ -40,6 +40,13 @@
 
 ## 功能变更记录
 
+### 2026-06-15 17:51
+
+- 功能：逐段核对 `黔址优选_Codex多步执行指令.md` 与当前 v2 仓库，修正模块路径、入口命令、离线复现机制、Step 7–8 真实输入输出、当前七页结构、Step 18 后维护边界和主线说明文档中的旧版残留；未修改任何功能代码、配置、数据、测试或运行输出。
+- 改动文件：`D:\Users\Desktop\GZAICp\qianzhi_selection\黔址优选_Codex多步执行指令.md`；`D:\Users\Desktop\GZAICp\qianzhi_selection\README.md`；`D:\Users\Desktop\GZAICp\qianzhi_selection\docs\初赛方案_新版.md`；`D:\Users\Desktop\GZAICp\qianzhi_selection\docs\方法调整说明.md`；`D:\Users\Desktop\GZAICp\qianzhi_selection\docs\技术路线草图.md`；`D:\Users\Desktop\GZAICp\qianzhi_selection\docs\项目执行计划.md`；`D:\Users\Desktop\GZAICp\qianzhi_selection\docs\推荐项目方案.md`；`D:\Users\Desktop\GZAICp\qianzhi_selection\docs\文档索引.md`；`D:\Users\Desktop\GZAICp\qianzhi_selection\docs\项目结构说明.md`；`D:\Users\Desktop\GZAICp\qianzhi_selection\docs\最终交付清单.md`；`D:\Users\Desktop\GZAICp\qianzhi_selection\docs\黔址优选_v2项目说明材料.md`；`D:\Users\Desktop\GZAICp\qianzhi_selection\AGENTS.md`。
+- 依据：用户明确要求逐段核对总控文档与当前 v2 真实结构；已读取当前工作树、`config.yaml`、`scripts\run_pipeline.py`、`src\core\config.py`、`src\app.py`、Step 3–10 当前模块、结构边界测试、模块布局测试、当前主线说明文档和真实 CSV 表头；当前稳定入口为 `python scripts/run_pipeline.py` 与 `streamlit run src/app.py`，当前职责包为 `src\core\`、`src\pipeline\`、`src\modeling\`、`src\presentation\` 和 `src\web\`，默认离线流程使用已跟踪的 Step 4–6 输入，仓库当前不存在 `data\demo\`。
+- 验证：已运行 `python -m unittest discover -s tests -v`，结果为 182 项测试通过；已运行递归 src 与 `scripts\run_pipeline.py` AST 语法检查，输出 `syntax ok`；已运行一键脚本、评分、POI 和报告模块的 `--help`，确认参数与文档一致；已运行当前主线文档路径检查，结果为 `document paths ok`；已检查 Markdown 标题、旧路径与旧状态表述，并运行 `git diff --check`，无格式错误。未运行会改写正式输出的一键流水线。
+
 ### 2026-06-10 13:02
 
 - 功能：执行 `黔址优选_Codex多步执行指令.md` Step 2，新增 v2 配置结构与配置读取 helper，同时保留 v1 legacy 配置键和旧模块兼容入口。

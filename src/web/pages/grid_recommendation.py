@@ -31,6 +31,10 @@ from src.web.pages.common import (
 from src.core.profile_catalog import ResultProfileSpec, TEMPLATE_FIELDS
 from src.modeling.scoring_model import WEIGHT_FIELDS, ScoringProfile
 from src.web.ui.workbench import render_page_header
+from src.web.decision_context import (
+    profile_default_index,
+    save_decision_context,
+)
 
 
 NEW_CUSTOM_PROFILE = "新建自定义方案"
@@ -802,6 +806,11 @@ def _render_results(st: Any, view: RecommendationView) -> None:
     selected = rows.loc[
         rows["grid_id"].astype(str).eq(selected_grid)
     ].iloc[0]
+    save_decision_context(
+        st.session_state,
+        profile_id=view.profile_id,
+        grid_id=selected_grid,
+    )
     _render_selected_grid_detail(st, selected, view)
     explanation_columns = st.columns(2, gap="large")
     explanation_columns[0].info(
@@ -810,6 +819,23 @@ def _render_results(st: Any, view: RecommendationView) -> None:
     explanation_columns[1].warning(
         f"主要风险：{selected[view.risk_field]}"
     )
+    link_button = getattr(st, "link_button", None)
+    if callable(link_button):
+        link_columns = st.columns(2, gap="medium")
+        with link_columns[0]:
+            link_button(
+                "在地图中查看",
+                "/map-insight",
+                type="secondary",
+                use_container_width=True,
+            )
+        with link_columns[1]:
+            link_button(
+                "生成该网格报告",
+                "/report-center",
+                type="primary",
+                use_container_width=True,
+            )
 
 
 def render(st_module: Any | None = None) -> None:
@@ -832,6 +858,7 @@ def render(st_module: Any | None = None) -> None:
             selected_source = st.selectbox(
                 "方案来源",
                 [*profiles, NEW_CUSTOM_PROFILE],
+                index=profile_default_index(profiles, st.session_state),
                 key="grid_recommendation_source",
             )
             if selected_source == NEW_CUSTOM_PROFILE:

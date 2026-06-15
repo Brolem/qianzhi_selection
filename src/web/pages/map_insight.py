@@ -14,6 +14,11 @@ from src.presentation.map_viz import (
 )
 from src.core.config import get_amap_map_config
 from src.web.ui.workbench import render_page_header
+from src.web.decision_context import (
+    DECISION_GRID_KEY,
+    DECISION_PROFILE_KEY,
+    profile_default_index,
+)
 
 
 def render_map_page(
@@ -47,7 +52,13 @@ def render_map_page(
         if business_type == "轻餐饮"
         else "默认｜社区便利店"
     )
-    default_index = labels.index(preferred_label) if preferred_label in labels else 0
+    default_index = profile_default_index(specs, st.session_state)
+    if (
+        default_index == 0
+        and preferred_label in labels
+        and DECISION_PROFILE_KEY not in st.session_state
+    ):
+        default_index = labels.index(preferred_label)
 
     map_config = get_amap_map_config()
 
@@ -136,6 +147,9 @@ def render_map_page(
                 st.subheader("地图参数")
                 spec, compatibility = select_spec()
                 st.caption("浅灰表示未采集，中性灰表示无 POI 活动。")
+                selected_grid = st.session_state.get(DECISION_GRID_KEY)
+                if selected_grid:
+                    st.caption(f"当前决策网格：{selected_grid}")
         with map_panel:
             render_map(spec, compatibility)
         return

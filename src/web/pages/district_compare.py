@@ -57,6 +57,25 @@ def load_district_comparison(
     ].copy()
 
 
+def format_district_summary_table(frame: pd.DataFrame) -> pd.DataFrame:
+    """Return the district summary with Chinese display headings."""
+    result = frame[DISTRICT_SUMMARY_FIELDS].copy()
+    for field in ["avg_convenience_score", "avg_light_food_score"]:
+        result[field] = pd.to_numeric(result[field], errors="coerce").round(2)
+    return result.rename(
+        columns={
+            "district_name": "区县",
+            "grid_count": "网格数",
+            "active_grid_count": "活跃网格数",
+            "poi_total_count": "POI 总量",
+            "avg_convenience_score": "便利店平均分",
+            "top_convenience_grid_id": "便利店最高分网格",
+            "avg_light_food_score": "轻餐饮平均分",
+            "top_light_food_grid_id": "轻餐饮最高分网格",
+        }
+    )
+
+
 def build_district_poi_comparison(
     path: str | Path = POI_COUNTS_PATH,
 ) -> pd.DataFrame:
@@ -173,7 +192,11 @@ def render(st_module: Any | None = None) -> None:
         return
     with st.container(border=True):
         st.subheader("三区汇总")
-        st.dataframe(frame, use_container_width=True, hide_index=True)
+        st.dataframe(
+            format_district_summary_table(frame),
+            use_container_width=True,
+            hide_index=True,
+        )
     st.subheader("区县 POI 原始数量对比")
     business_column, transport_column = st.columns(2, gap="large")
     with business_column:

@@ -3,6 +3,7 @@
 > 版本：v2.0  
 > 目标：将项目从旧版“Geofabrik/OSM 两阶段选址推荐”调整为“区县背景约束下的网格级多因子商业选址推荐模型”，并将前端改造成类似百度地图慧眼的商业选址工作台。  
 > 当前推荐技术栈：Python + Streamlit + 高德 Web 服务 API + 高德 JS API 2.0 + Folium 兼容回退 + Markdown 报告生成。
+> 当前状态：Step 0 到 Step 18 已完成；本文同时保留历史执行顺序和当前 v2 真实入口，2026 年 6 月 15 日按仓库现状复核。
 
 ---
 
@@ -24,7 +25,7 @@
 
 后续项目文档、README、前端页面、答辩材料统一使用以下口径：
 
-> 本项目以贵阳市典型区县为试点，将官方宏观经济指标和就业数据作为区域市场背景，将高德 POI 与地理空间数据作为网格级特征来源，构建“区县背景约束下的网格级多因子商业选址推荐模型”。系统不进行门牌号级推荐，而是输出适合社区便利店和轻餐饮业态的优先考察网格，并提供地图洞察、指标解释和智能选址报告。
+> 本项目以贵阳市典型区县为试点，将官方宏观经济指标和就业数据作为贵州省级市场背景，将高德 POI 与地理空间数据作为网格级特征来源，构建“区县背景约束下的网格级多因子商业选址推荐模型”。系统不进行门牌号级推荐，而是输出适合社区便利店和轻餐饮业态的优先考察网格，并提供地图洞察、指标解释和智能选址报告。
 
 ---
 
@@ -87,12 +88,12 @@
 
 | 数据类型 | 来源 | 用途 |
 |---|---|---|
-| 官方宏观经济指标 | 赛事官方数据 | 贵州/贵阳整体市场背景、消费能力、区域发展说明 |
-| 官方就业数据 | 赛事官方数据 | 就业客群、收入水平、稳定消费需求背景 |
+| 官方宏观经济指标 | 赛事官方数据 | 贵州省级市场背景、消费与区域发展说明 |
+| 官方就业数据 | 赛事官方数据 | 贵州省级就业背景与数据适用边界说明 |
 | POI 数据 | 高德 POI API，百度/腾讯作为备选 | 网格级商业、交通、生活配套、竞品、共生业态统计 |
 | 行政区划 | 高德行政区划 API | 区县信息、区县边界、区县中心点 |
 | 地图展示 | 高德 JS API 2.0 / Streamlit components / Folium 兼容回退 | GCJ-02 推荐网格地图、热力图、点位提示 |
-| 示例数据 | data/demo/ | 无 AMAP_KEY 时保证项目可演示 |
+| 离线复现输入 | `data/processed/` 中已跟踪的区县、边界、网格和 POI 样本 | 无 `AMAP_KEY` 时由 Step 18 默认流程复现指标、评分、地图和模板报告 |
 
 ---
 
@@ -110,10 +111,10 @@
 2. 业务对象：社区便利店、轻餐饮。
 3. 推荐对象：1km 评价网格，不做真实门牌号级推荐。
 4. 数据来源：
-   - 官方宏观经济指标和就业数据：用于贵州/贵阳市场背景、消费能力、就业客群说明；
+   - 官方宏观经济指标和就业数据：用于贵州省级市场、消费与就业背景说明，不下钻到贵阳、区县或网格；
    - 高德 POI API：用于网格级 POI 样本统计；
    - 高德行政区划 API：用于区县信息和边界；
-   - 示例数据：无 AMAP_KEY 时使用 data/demo/ 下的离线示例数据。
+   - 离线复现输入：无 AMAP_KEY 时使用仓库已跟踪的 data/processed/ 区县、边界、网格和 POI 样本，不重新调用高德。
 5. 方法主线：
    官方数据背景说明 → 目标区县确定 → 生成 1km 网格 → 高德 POI 查询与缓存 → 网格级指标构建 → 便利店/轻餐饮差异化评分 → 全局 Top N 与各区县 Top N 推荐 → 地图洞察 → 智能报告。
 6. 前端目标：
@@ -132,7 +133,7 @@
 
 ## 3. 执行总览
 
-建议分 18 步让 Codex 逐步完成：
+项目历史上按 18 步实施，当前 Step 0 到 Step 18 均已完成。下表用于追溯任务边界和验收来源：
 
 | 步骤 | 任务 | 目标 | 是否必须 |
 |---:|---|---|---|
@@ -175,8 +176,8 @@
 
 请只做检查，不做业务重构。
 
-1. 建议创建新分支：
-   git checkout -b refactor-amap-grid-workbench
+1. 历史迁移分支已经完成。当前分支为：
+   codex/v2.0
 
 2. 检查项目目录：
    - data/
@@ -185,16 +186,16 @@
    - docs/
    - tests/
 
-3. 检查 src/ 下所有 Python 文件语法：
-   python -c "import ast, pathlib; [ast.parse(p.read_text(encoding='utf-8'), filename=str(p)) for p in pathlib.Path('src').glob('*.py')]; print('syntax ok')"
+3. 检查 src/ 和一键脚本下所有 Python 文件语法：
+   python -c "import ast, pathlib; [ast.parse(p.read_text(encoding='utf-8'), filename=str(p)) for p in pathlib.Path('src').rglob('*.py')]; ast.parse(pathlib.Path('scripts/run_pipeline.py').read_text(encoding='utf-8')); print('syntax ok')"
 
 4. 检查现有核心输出是否存在：
-   - data/processed/macro_clean.csv
-   - data/processed/employment_clean.csv
-   - outputs/results/字段说明表.csv
-   - outputs/results/数据识别与合理性报告.md
+   - data/processed/official/macro_clean.csv
+   - data/processed/official/employment_clean.csv
+   - outputs/results/metadata/字段说明表.csv
+   - outputs/reports/数据识别与合理性报告.md
 
-5. 新增 docs/迁移前项目状态.md，说明：
+5. 历史状态文档保存为 docs/history/迁移前项目状态.md，说明：
    - 当前数据源
    - 当前评分逻辑
    - 当前前端入口
@@ -211,13 +212,13 @@
 
 ```bash
 python -m unittest discover -s tests -v
-python -c "import ast, pathlib; [ast.parse(p.read_text(encoding='utf-8'), filename=str(p)) for p in pathlib.Path('src').glob('*.py')]; print('syntax ok')"
+python -c "import ast, pathlib; [ast.parse(p.read_text(encoding='utf-8'), filename=str(p)) for p in pathlib.Path('src').rglob('*.py')]; ast.parse(pathlib.Path('scripts/run_pipeline.py').read_text(encoding='utf-8')); print('syntax ok')"
 ```
 
 ### 预期产出
 
 ```text
-docs/迁移前项目状态.md
+docs/history/迁移前项目状态.md
 ```
 
 ---
@@ -315,8 +316,10 @@ config.yaml 需要包含：
 
 3. data_paths
    - official_raw_dir
+   - official_processed_dir
    - processed_dir
    - results_dir
+   - results_metadata_dir
    - reports_dir
    - figures_dir
    - amap_cache_dir
@@ -354,6 +357,12 @@ config.yaml 需要包含：
      synergy_score
      competition_pressure
      business_atmosphere
+
+6. 当前还包含：
+   - poi_typecodes
+   - scoring_templates
+   - map
+   - llm
 
 src/core/config.py 实现：
 - load_config()
@@ -414,7 +423,7 @@ python -c "from src.core.config import load_config, ensure_dirs, get_weights; cf
    - 保存 JSON 原始响应
 
 4. 请求限制：
-   - 加入 sleep，默认每次请求间隔 0.2-0.5 秒；
+   - 客户端每次真实请求前固定等待 0.2 秒；
    - 不做并发请求；
    - 不绕过 API 限制。
 
@@ -458,7 +467,7 @@ python -c "from src.pipeline.amap_client import AmapClient; c=AmapClient(); prin
 
 输入：
 - config.yaml 中的 target_districts
-- AMAP_KEY，如果没有则使用 data/demo/target_districts_demo.csv 和 data/demo/target_district_boundaries_demo.geojson
+- AMAP_KEY
 
 输出：
 1. data/processed/target_districts.csv
@@ -485,9 +494,10 @@ python -c "from src.pipeline.amap_client import AmapClient; c=AmapClient(); prin
    - 仍保存 center；
    - has_boundary=False；
    - 记录到 outputs/results/district_boundary_warnings.md。
-5. 无 AMAP_KEY 时：
-   - 使用 demo 文件；
-   - 如果 demo 文件不存在，生成 docs/需要准备的数据.md，提示用户准备 demo 区县文件。
+5. 当前真实边界刷新不提供内置离线区县文件：
+   - `python scripts/run_pipeline.py --refresh-amap` 会在执行前强制检查 `AMAP_KEY`；
+   - 默认离线流程直接使用已跟踪的 Step 4–6 输入，不重复执行本模块；
+   - 单独执行本模块且未配置 `AMAP_KEY` 只会得到无响应警告和不完整输出，不作为交付路径。
 
 禁止：
 - 不要用街道边界作为核心，因为高德街道边界不稳定/不可得；
@@ -498,7 +508,7 @@ python -c "from src.pipeline.amap_client import AmapClient; c=AmapClient(); prin
 ### 验收命令
 
 ```bash
-python src/pipeline/district_builder.py
+python -m src.pipeline.district_builder
 ```
 
 ---
@@ -532,13 +542,14 @@ python src/pipeline/district_builder.py
 - centroid_lat
 - area_km2
 - geometry_wkt
+- data_source
 
 技术要求：
 1. 必须使用投影坐标系生成 1000m x 1000m 网格，不要直接在经纬度上按度切分。
-2. 生成后再转回 WGS84 或当前地图使用坐标。
+2. 米制计算使用 `EPSG:32648`；输出数值沿用高德数据坐标表达，并在 GeoJSON 中明确标记 `coord_system=GCJ-02`。
 3. 只保留与区县边界相交的网格。
 4. 对网格面积过小的边缘网格可以保留，但需要 area_km2 字段。
-5. 如果没有真实边界，则用区县 center 生成演示网格，并在 data_source 字段标记 demo。
+5. 如果没有真实边界，则用区县 center 生成一个回退方格，并在 data_source 字段精确标记为 `demo_center`。
 
 禁止：
 - 不要生成门牌号；
@@ -549,7 +560,7 @@ python src/pipeline/district_builder.py
 ### 验收命令
 
 ```bash
-python src/pipeline/grid_builder.py
+python -m src.pipeline.grid_builder
 ```
 
 ---
@@ -558,7 +569,7 @@ python src/pipeline/grid_builder.py
 
 ### 目标
 
-对每个 1km 网格中心点做周边 POI 查询，得到模型输入表。
+对三区各 20 个空间分散样本网格的中心点做周边 POI 查询，得到模型输入表。
 
 ### 给 Codex 的指令
 
@@ -571,7 +582,7 @@ python src/pipeline/grid_builder.py
 - data/processed/candidate_grids.csv
 - config.yaml 中 poi_categories
 - config.yaml 中 default_radius_m，默认 500
-- AMAP_KEY；若无 key，则使用 data/demo/grid_poi_counts_demo.csv
+- AMAP_KEY；在线采集必须配置。默认离线交付直接复用已跟踪的 `grid_poi_raw.csv` 和 `grid_poi_counts.csv`
 
 输出：
 1. data/processed/grid_poi_raw.csv
@@ -609,7 +620,7 @@ python src/pipeline/grid_builder.py
 - parking_count
 
 实现要求：
-1. 对每个 grid centroid 和每个 POI 类别调用周边搜索。
+1. 默认先从每个区县确定性抽取 20 个空间分散网格，再对每个样本网格中心点和每个 POI 类别调用周边搜索；`--all-grids` 才处理输入文件中的全部网格。
 2. 半径默认 500m。
 3. 每类最多抓取前若干页，默认不要超过官方限制。
 4. 所有响应走 AmapClient 缓存。
@@ -619,9 +630,13 @@ python src/pipeline/grid_builder.py
    - 查询区县数
    - 网格数
    - 类别数
-   - API 模式或 demo 模式
+   - `amap_api` 或 `demo` 模式
    - 每类 POI 数量
    - 数据限制说明
+
+8. 当前 `config.yaml` 保留 `data_paths.demo_dir`，`poi_fetcher` 也会精确查找
+   `data/demo/grid_poi_counts_demo.csv`，但仓库当前没有该文件。因此无 Key
+   的稳定入口是 `python scripts/run_pipeline.py`，不是单独重跑 Step 6。
 
 禁止：
 - 不要声称抓取全量 POI；
@@ -632,7 +647,7 @@ python src/pipeline/grid_builder.py
 ### 验收命令
 
 ```bash
-python src/pipeline/poi_fetcher.py
+python -m src.pipeline.poi_fetcher
 ```
 
 ---
@@ -653,8 +668,12 @@ python src/pipeline/poi_fetcher.py
 输入：
 - data/processed/grid_poi_counts.csv
 - data/processed/candidate_grids.csv
-- data/processed/macro_clean.csv
-- data/processed/employment_clean.csv
+
+官方数据实际位于：
+- data/processed/official/macro_clean.csv
+- data/processed/official/employment_clean.csv
+
+这两个官方文件只用于背景与报告说明，不是 `feature_engineering.py` 的运行输入。
 
 输出：
 - data/processed/grid_scoring_input.csv
@@ -671,16 +690,19 @@ python src/pipeline/poi_fetcher.py
 3. employment_customer_proxy
 由 office_count、mall_count、school_count、restaurant_count 构成，用作就业/办公/学生客群代理。
 
-4. synergy_score
-便利店共生：residential、school、hospital、bus_stop、supermarket；
-轻餐饮共生：office、school、mall、bus_stop、cafe、tea。
+4. convenience_synergy_score
+由 residential、school、hospital、bus_stop、supermarket 构成。
 
-5. competition_pressure
-便利店竞争：convenience_store_count、supermarket_count；
-轻餐饮竞争：restaurant_count、fast_food_count、snack_count、cafe_count、tea_count。
-这是负向指标，后续评分要反向处理。
+5. light_food_synergy_score
+由 office、school、mall、bus_stop、cafe、tea 构成。
 
-6. business_atmosphere
+6. convenience_competition_pressure
+由 convenience_store_count、supermarket_count 构成。
+
+7. light_food_competition_pressure
+由 restaurant_count、fast_food_count、snack_count、cafe_count、tea_count 构成。
+
+8. business_atmosphere
 由 mall、restaurant、cafe、tea、supermarket 等体现商业活跃度。
 
 要求：
@@ -691,8 +713,10 @@ python src/pipeline/poi_fetcher.py
    traffic_accessibility,
    consumption_potential,
    employment_customer_proxy,
-   synergy_score,
-   competition_pressure,
+   convenience_synergy_score,
+   light_food_synergy_score,
+   convenience_competition_pressure,
+   light_food_competition_pressure,
    business_atmosphere
 
 4. 生成 outputs/results/feature_engineering_report.md，解释每个指标如何构造。
@@ -706,7 +730,7 @@ python src/pipeline/poi_fetcher.py
 ### 验收命令
 
 ```bash
-python src/modeling/feature_engineering.py
+python -m src.modeling.feature_engineering
 ```
 
 ---
@@ -733,6 +757,7 @@ python src/modeling/feature_engineering.py
 1. outputs/results/grid_stage_score_result.csv
 2. outputs/results/district_summary_result.csv
 3. outputs/results/recommendation_summary.md
+4. outputs/results/profile_metadata.json
 
 评分逻辑：
 1. 正向指标：
@@ -801,13 +826,13 @@ python src/modeling/feature_engineering.py
 ### 验收命令
 
 ```bash
-python src/modeling/scoring_model.py
+python -m src.modeling.scoring_model
 ```
 
 自定义方案示例：
 
 ```powershell
-python src/modeling/scoring_model.py `
+python -m src.modeling.scoring_model `
   --profile-id custom_retail_01 `
   --profile-name "自定义社区业态" `
   --template community_retail `
@@ -991,21 +1016,17 @@ python -m src.presentation.report_generator --profile convenience --grid-id grid
 6. 智能报告
 7. 项目说明
 
-建议目录：
-src/app.py 作为入口；
+当前目录：
+src/app.py 作为唯一当前入口；
 src/web/pages/
-  01_overview.py
-  02_data_foundation.py
+  overview.py
+  data_foundation.py
   district_compare.py
   grid_recommendation.py
   map_insight.py
   report_center.py
   project_notes.py
-
-若不想拆文件，也可以先在 app.py 中用函数组织：
-render_overview()
-render_data_foundation()
-...
+src/web/ui/workbench.py 作为共享视觉模块。
 
 禁止：
 - 不要改动评分模型；
@@ -1018,6 +1039,7 @@ render_data_foundation()
 - 当前 Streamlit 版本为 `1.58.0`，正式入口使用 `st.Page` 和 `st.navigation`，并保留 sidebar radio 回退。
 - Step 11 最初建立八页结构；Step 13–15 实施时删除职责重复的独立“选址分析”页，当前 `src/app.py` 负责宽屏配置、七页注册和导航；原入口保留为 `src/legacy/v1/app.py`。
 - 页面模块实际位于 `src/web/pages/`，文件名采用无数字前缀的 Python 模块名，并通过稳定的页面注册顺序控制导航。
+- `src/web/decision_context.py` 保存评分方案和网格选择，使网格推荐、地图洞察和智能报告能够复用当前决策上下文。
 - “网格推荐”“地图洞察”和“智能报告”使用各页面独立评分方案选择器，不保留全局固定业态侧栏。
 - 项目总览增加真实 POI 和得分图表；区域对比展示原始 POI 分组统计；网格推荐统一承载自定义权重和即时评分。
 - 地图和报告页面迁移后继续兼容 Step 9–10 的默认、自定义方案、静态回退、会话缓存和模板报告行为。
@@ -1084,7 +1106,7 @@ streamlit run src/app.py
 
 - 实际共享视觉模块为 `src/web/ui/workbench.py`，主题配置为 `.streamlit/config.toml`。
 - `src/app.py` 在运行七页导航前统一加载主题和标题栏，未隐藏 Streamlit 原生工具栏。
-- 首页四项主指标读取真实数据与配置，当前为 3 个目标区县、790 个空间评价网格、15 类 POI 和 41 个活跃推荐网格；60 个采样网格和 3 套有效评分方案作为辅助信息展示。
+- 首页四项主指标读取真实数据与配置，当前为 3 个目标区县、790 个空间评价网格、15 类 POI 和 41 个活跃推荐网格；60 个采样网格和 2 套默认评分方案作为辅助信息展示。正式保存自定义方案后，页面再通过共享方案目录动态发现。
 - 标题栏桌面端居中显示并使用 24px 字号，窄屏下固定缩小字号和间距。
 - “网格推荐”“地图洞察”“智能报告”分别采用参数与结果分区；智能报告保持按钮触发，不在页面加载时调用模型。
 - 响应式样式使用 900px 和 600px 两个断点，不依赖外部 CDN、外部字体、JavaScript 或复杂前端框架。
@@ -1263,22 +1285,16 @@ streamlit run src/app.py
    - 便利店
    - 轻餐饮
 
-2. 选择区县：
-   - 全部
-   - 云岩区
-   - 南明区
-   - 观山湖区
-   - 花溪区
-   - 白云区
-
-3. 展示地图：
+2. 展示地图：
    - 推荐网格中心点或网格面；
    - 评分颜色；
    - Top N 高亮；
    - tooltip 显示 grid_id、区县、得分、优势、风险。
 
-4. 高德 JS API 使用 GCJ-02 原始网格数据；用户可主动切换 Folium 兼容地图。
-5. 缺少 AMAP_JS_KEY 或 AMAP_JS_SECURITY_CODE 时自动回退 Folium，并显示准确说明。
+3. 高德 JS API 使用 GCJ-02 原始网格数据；用户可主动切换 Folium 兼容地图。
+4. 缺少 AMAP_JS_KEY 或 AMAP_JS_SECURITY_CODE 时自动回退 Folium，并显示准确说明。
+
+当前实际页面只提供评分方案和兼容地图开关，地图始终展示完整 790 个空间网格；区县信息进入悬停和点击详情。地图页区县筛选仍属于后续路线，未写成当前能力。
 
 禁止：
 - 不要把任何高德凭据写入仓库；
@@ -1395,7 +1411,7 @@ streamlit run src/app.py
 更新 README.md：
 - 环境安装
 - AMAP_KEY 配置
-- 无 AMAP_KEY 时 demo 模式
+- 无 AMAP_KEY 时使用已跟踪输入完成默认离线复现
 - 一键运行命令
 - Streamlit 启动命令
 - 输出文件说明
@@ -1441,6 +1457,7 @@ src.presentation.report_generator
 ```
 
 默认运行不重新调用外部 API，保证比赛交付可重复；在线刷新和 DeepSeek 报告必须显式启用。
+默认离线基线精确验收 3 个区县、790 个空间网格、60 个 POI 样本网格、41 个活跃网格和 19 个无活动网格。
 
 ---
 
@@ -1465,9 +1482,9 @@ src.presentation.report_generator
 
 ---
 
-# 5. 每步完成后的 Codex 回复格式
+# 5. 历史执行回复格式
 
-每一步完成后，让 Codex 必须按这个格式回复：
+Step 0 到 Step 18 实施期间，每一步按这个格式回复；后续维护不再据此自动新增步骤：
 
 ```text
 本步完成情况：
@@ -1499,16 +1516,16 @@ src.presentation.report_generator
 
 ---
 
-# 7. 推荐优先级
+# 7. 已完成范围与后续路线
 
-如果时间不够，优先完成：
+下表中的 P0 和 P1 已纳入 Step 0 到 Step 18 的当前实现。P2 和 P3 只是后续路线，不是 Step 19 或更高步骤，也不得写成当前已完成能力。
 
 | 优先级 | 内容 |
 |---|---|
-| P0 | 配置文件、高德 API demo 模式、网格生成、POI 统计、评分结果、Streamlit 网格推荐页、自定义权重 |
-| P1 | 地图洞察、智能报告、区域对比、视觉样式 |
-| P2 | 单点评估、报告导出 Word/PDF |
-| P3 | 百度/腾讯 POI 备选、多源 POI 融合、H3 六边形、Location-Allocation 优化 |
+| 已完成 P0 | 配置、高德客户端与缓存、网格生成、POI 样本统计、评分结果、网格推荐、自定义权重 |
+| 已完成 P1 | 地图洞察、智能报告、区域对比、视觉样式 |
+| 后续 P2 | 单点评估、报告导出 Word/PDF |
+| 后续 P3 | 百度/腾讯 POI 备选、多源 POI 融合、H3 六边形、Location-Allocation 优化 |
 
 最小可交付版本必须包含：
 
@@ -1544,6 +1561,14 @@ streamlit run src/app.py
 
 v1 使用独立配置、数据和输出目录，不参与当前默认入口。详细说明见 `docs/项目结构说明.md` 和 `docs/legacy/v1/README.md`。
 
+Step 18 是当前执行计划终点。此后的工作属于维护、核验或另行批准的增强任务：
+
+1. 不自动延伸为 Step 19。
+2. 不把 P2/P3 路线写成当前能力。
+3. 不新增并列的 v2.1、v3 或重复入口目录。
+4. 新增功能继续放入现有职责包，并同步更新测试、说明文档和 `AGENTS.md` 记录。
+5. 当前主线不得导入 `src/legacy/v1/`，旧版也不得导入当前业务包。
+
 ---
 
 # 9. 参考资料
@@ -1573,4 +1598,4 @@ v1 使用独立配置、数据和输出目录，不参与当前默认入口。�
 
 # 10. 最终一句话
 
-后续让 Codex 执行时，不要一次性丢全部内容；应该按 Step 0 → Step 1 → Step 2 的顺序逐步推进，每一步验收通过后再继续。
+Step 0 到 Step 18 已完成。后续维护必须先读取真实仓库，再在现有职责边界内实施和验证；未经用户明确批准，不新增后续步骤或扩大当前能力口径。

@@ -17,6 +17,10 @@ from src.app import (
 )
 from src.presentation.report_generator import ReportGenerationResult
 from src.presentation.map_viz import MapProfileSpec
+from src.web.pages.report_center import (
+    _report_preview_html,
+    build_report_preview,
+)
 
 
 class FakeStreamlit:
@@ -45,6 +49,9 @@ class FakeStreamlit:
         self.status_calls = []
         self.status_updates = []
         self.container_calls = []
+        self.html_calls = []
+        self.chart_calls = []
+        self.link_button_calls = []
 
     def header(self, text):
         self.headers.append(text)
@@ -74,6 +81,12 @@ class FakeStreamlit:
     def markdown(self, text):
         self.markdowns.append(text)
 
+    def html(self, text):
+        self.html_calls.append(text)
+
+    def altair_chart(self, chart, **kwargs):
+        self.chart_calls.append((chart, kwargs))
+
     def subheader(self, text):
         self.subheaders.append(text)
 
@@ -96,6 +109,10 @@ class FakeStreamlit:
 
     def button(self, label):
         return label in self.clicked_buttons
+
+    def link_button(self, label, url, **kwargs):
+        self.link_button_calls.append((label, url, kwargs))
+        return False
 
     def download_button(self, label, **kwargs):
         self.downloads.append((label, kwargs))
@@ -334,6 +351,27 @@ def make_report_spec(result_path: Path) -> MapProfileSpec:
 
 
 class AppHelperTests(unittest.TestCase):
+    def test_report_preview_uses_selected_grid_score_diagnosis_and_six_metrics(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            base = Path(tmp_dir)
+            result_path = write_report_result(base / "result.csv")
+            spec = make_report_spec(result_path)
+            frame = pd.read_csv(result_path)
+
+            preview = build_report_preview(
+                frame,
+                spec,
+                "grid_001",
+            )
+            content = _report_preview_html(preview)
+
+            self.assertEqual(preview["grid_id"], "grid_001")
+            self.assertEqual(preview["rank"], 1)
+            self.assertEqual(len(preview["metrics"]), 6)
+            self.assertIn("一般观察型", content)
+            self.assertIn("未触发过度竞争预警", content)
+            self.assertIn("交通可达性", preview["metrics"]["指标"].tolist())
+
     def test_page_registrations_define_seven_workbench_pages_in_order(self):
         self.assertEqual(
             [page.title for page in PAGE_REGISTRATIONS],

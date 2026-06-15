@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+from html import escape
 from typing import Any
+
+import pandas as pd
 
 from src.web.pages.common import get_streamlit
 from src.presentation.report_generator import (
@@ -11,6 +14,112 @@ from src.presentation.report_generator import (
 )
 from src.presentation.map_viz import MapProfileSpec, available_profile_specs
 from src.web.ui.workbench import render_page_header
+from src.web.ui.workbench import render_html
+from src.web.decision_context import (
+    grid_default_index,
+    profile_default_index,
+    save_decision_context,
+)
+
+
+def build_report_preview(
+    frame: pd.DataFrame,
+    profile: MapProfileSpec,
+    grid_id: str,
+) -> dict[str, Any]:
+    """Build a program-generated report preview for one ranked grid."""
+    required = [
+        "grid_id",
+        "district_name",
+        "traffic_accessibility",
+        "consumption_potential",
+        "employment_customer_proxy",
+        "business_atmosphere",
+        profile.synergy_field,
+        profile.competition_score_field,
+        profile.score_field,
+        profile.rank_field,
+        profile.district_rank_field,
+        profile.level_field,
+        profile.market_stage_field,
+        profile.competition_alert_field,
+        profile.advantage_field,
+        profile.risk_field,
+    ]
+    missing = [field for field in required if field not in frame]
+    if missing:
+        raise KeyError("评分结果缺少字段：" + ", ".join(missing))
+    selected = frame.loc[frame["grid_id"].astype(str).eq(str(grid_id))]
+    if len(selected) != 1:
+        raise ValueError(f"评价网格必须唯一存在：{grid_id}")
+    row = selected.iloc[0]
+    metrics = pd.DataFrame(
+        [
+            ("交通可达性", row["traffic_accessibility"]),
+            ("消费潜力", row["consumption_potential"]),
+            ("就业客群代理", row["employment_customer_proxy"]),
+            ("共生业态", row[profile.synergy_field]),
+            ("低竞争得分", row[profile.competition_score_field]),
+            ("商业氛围", row["business_atmosphere"]),
+        ],
+        columns=["指标", "得分"],
+    )
+    metrics["得分"] = pd.to_numeric(metrics["得分"], errors="raise")
+    return {
+        "grid_id": str(row["grid_id"]),
+        "district_name": str(row["district_name"]),
+        "score": float(row[profile.score_field]),
+        "rank": int(float(row[profile.rank_field])),
+        "district_rank": int(float(row[profile.district_rank_field])),
+        "level": str(row[profile.level_field]),
+        "market_stage": str(row[profile.market_stage_field]),
+        "competition_alert": str(row[profile.competition_alert_field]),
+        "advantage": str(row[profile.advantage_field]),
+        "risk": str(row[profile.risk_field]),
+        "metrics": metrics,
+    }
+
+
+def _report_preview_html(preview: dict[str, Any]) -> str:
+    """Render one compact decision preview before invoking DeepSeek."""
+    alert_class = (
+        "is-warning"
+        if preview["competition_alert"] == "过度竞争预警"
+        else "is-neutral"
+    )
+    rows = []
+    for _, metric in preview["metrics"].iterrows():
+        score = max(0.0, min(float(metric["得分"]), 100.0))
+        rows.append(
+            '<div class="workbench-report-preview-row">'
+            f"<span>{escape(str(metric['指标']))}</span>"
+            '<span class="workbench-report-preview-track">'
+            f'<span class="workbench-report-preview-fill" style="width:{score:.1f}%"></span>'
+            "</span>"
+            f"<strong>{score:.1f}</strong>"
+            "</div>"
+        )
+    return (
+        '<section class="workbench-report-preview">'
+        '<div class="workbench-report-preview-head">'
+        "<div>"
+        f'<div class="workbench-report-preview-score">{preview["score"]:.2f}'
+        "<small> / 100</small></div>"
+        f'<div class="workbench-metric-note">{escape(preview["district_name"])}'
+        f'｜全局 #{preview["rank"]}｜区内 #{preview["district_rank"]}</div>'
+        "</div>"
+        '<div class="workbench-report-preview-meta">'
+        f'<span class="workbench-status-badge is-success">{escape(preview["level"])}</span>'
+        f'<span class="workbench-status-badge is-neutral">{escape(preview["market_stage"])}</span>'
+        f'<span class="workbench-status-badge {alert_class}">{escape(preview["competition_alert"])}</span>'
+        "</div></div>"
+        '<div class="workbench-report-preview-grid">'
+        + "".join(rows)
+        + "</div>"
+        f'<div class="workbench-metric-note">优势：{escape(preview["advantage"])}；'
+        f'风险：{escape(preview["risk"])}</div>'
+        "</section>"
+    )
 
 
 def render_report_page(
@@ -35,10 +144,12 @@ def render_report_page(
         st.warning("没有可用的评分方案。")
         return
 
-    def select_target() -> tuple[MapProfileSpec, str] | None:
+    def select_target() -> tuple[MapProfileSpec, str, dict[str, Any]] | None:
+        profile_index = profile_default_index(specs, st.session_state)
         selected_label = st.selectbox(
             "评分方案",
             list(specs),
+            index=profile_index,
         )
         profile = specs[selected_label]
         try:
@@ -62,8 +173,19 @@ def render_report_page(
         selected_grid_label = st.selectbox(
             "评价网格",
             list(option_to_grid),
+            index=grid_default_index(active, st.session_state),
         )
-        return profile, option_to_grid[selected_grid_label]
+        selected_grid_id = option_to_grid[selected_grid_label]
+        save_decision_context(
+            st.session_state,
+            profile_id=profile.profile_id,
+            grid_id=selected_grid_id,
+        )
+        return (
+            profile,
+            selected_grid_id,
+            build_report_preview(active, profile, selected_grid_id),
+        )
 
     def generate_report(
         profile: MapProfileSpec,
@@ -121,6 +243,7 @@ def render_report_page(
     def render_report_state(
         profile: MapProfileSpec,
         selected_grid_id: str,
+        preview: dict[str, Any],
         *,
         show_empty: bool,
     ) -> None:
@@ -141,6 +264,7 @@ def render_report_page(
         report = st.session_state.get(result_key)
         if report is None:
             if show_empty:
+                render_html(st, _report_preview_html(preview))
                 st.info("选择评分方案和评价网格后，点击“生成智能报告”。")
             return
         if report.mode == "template":
@@ -167,7 +291,7 @@ def render_report_page(
                 st.subheader("报告参数")
                 target = select_target()
                 if target is not None and st.button("生成智能报告"):
-                    generate_report(*target, use_llm=True)
+                    generate_report(target[0], target[1], use_llm=True)
         if target is None:
             return
         with report_panel:
@@ -180,7 +304,7 @@ def render_report_page(
     if target is None:
         return
     if st.button("生成智能报告"):
-        generate_report(*target, use_llm=True)
+        generate_report(target[0], target[1], use_llm=True)
     render_report_state(*target, show_empty=False)
 
 

@@ -309,6 +309,117 @@ WORKBENCH_CSS = """
   background: #E9EDF2;
 }
 
+.workbench-coverage-funnel {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr auto 1fr;
+  align-items: stretch;
+  gap: 10px;
+  margin: 4px 0 18px;
+}
+
+.workbench-coverage-stage {
+  padding: 12px 14px;
+  background: var(--workbench-surface);
+  border: 1px solid var(--workbench-border);
+  border-radius: 6px;
+}
+
+.workbench-coverage-stage.is-active {
+  background: #EEF8F3;
+  border-color: #9CCFBA;
+}
+
+.workbench-coverage-label {
+  color: var(--workbench-muted);
+  font-size: 12px;
+}
+
+.workbench-coverage-value {
+  margin-top: 3px;
+  color: var(--workbench-text);
+  font-size: 22px;
+  font-weight: 700;
+}
+
+.workbench-coverage-note {
+  margin-top: 3px;
+  color: var(--workbench-muted);
+  font-size: 11px;
+}
+
+.workbench-coverage-arrow {
+  display: flex;
+  align-items: center;
+  color: #94A3B8;
+  font-size: 18px;
+}
+
+.workbench-report-preview {
+  padding: 14px 16px;
+  background: var(--workbench-surface);
+  border: 1px solid var(--workbench-border);
+  border-radius: 6px;
+}
+
+.workbench-report-preview-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--workbench-border);
+}
+
+.workbench-report-preview-score {
+  color: var(--workbench-text);
+  font-size: 30px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.workbench-report-preview-score small {
+  color: var(--workbench-muted);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.workbench-report-preview-meta {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+.workbench-report-preview-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px 14px;
+  margin-top: 12px;
+}
+
+.workbench-report-preview-row {
+  display: grid;
+  grid-template-columns: 90px minmax(0, 1fr) 44px;
+  align-items: center;
+  gap: 8px;
+  color: var(--workbench-muted);
+  font-size: 12px;
+}
+
+.workbench-report-preview-track {
+  height: 6px;
+  overflow: hidden;
+  background: #E7ECF2;
+  border-radius: 999px;
+}
+
+.workbench-report-preview-fill {
+  display: block;
+  height: 100%;
+  background: var(--workbench-blue);
+  border-radius: inherit;
+}
+
 .workbench-budget-panel {
   margin: 12px 0 16px;
   padding: 13px 15px 12px;
@@ -504,7 +615,8 @@ WORKBENCH_CSS = """
 
   .workbench-metric-grid,
   .workbench-flow,
-  .workbench-diagnostic-grid {
+  .workbench-diagnostic-grid,
+  .workbench-report-preview-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
@@ -548,8 +660,18 @@ WORKBENCH_CSS = """
   .workbench-metric-grid,
   .workbench-flow,
   .workbench-diagnostic-grid,
-  .workbench-budget-summary {
+  .workbench-budget-summary,
+  .workbench-report-preview-grid {
     grid-template-columns: minmax(0, 1fr);
+  }
+
+  .workbench-coverage-funnel {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .workbench-coverage-arrow {
+    justify-content: center;
+    transform: rotate(90deg);
   }
 
   [data-testid="stHorizontalBlock"] {
@@ -570,6 +692,11 @@ def _render_html(st: Any, body: str) -> None:
         html_renderer(body)
         return
     st.markdown(body, unsafe_allow_html=True)
+
+
+def render_html(st: Any, body: str) -> None:
+    """Render trusted project HTML through the available Streamlit API."""
+    _render_html(st, body)
 
 
 def apply_workbench_theme(st: Any) -> None:

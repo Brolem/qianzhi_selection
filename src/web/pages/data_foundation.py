@@ -91,7 +91,7 @@ def build_data_foundation_rows(
                 "1km 空间网格",
                 "贵阳市三个目标区县的完整研究范围",
                 "评分对象与地图空间底板",
-                "存储为 GCJ-02 数值坐标，显示时转换为 WGS84",
+                "高德地图使用 GCJ-02 原始坐标；兼容地图显示时转换为 WGS84",
             ),
         )
     if scoring_input_path is not None:
@@ -107,6 +107,21 @@ def build_data_foundation_rows(
             ),
         )
     return rows
+
+
+def format_data_foundation_table(rows: list[dict[str, Any]]) -> pd.DataFrame:
+    """Return the data inventory with presentation-safe Chinese headings."""
+    return pd.DataFrame(rows).rename(
+        columns={
+            "data_name": "数据资产",
+            "record_count": "记录数",
+            "geographic_scope": "地域范围",
+            "data_role": "数据角色",
+            "coordinate_note": "坐标与口径",
+        }
+    )[
+        ["数据资产", "记录数", "地域范围", "数据角色", "坐标与口径"]
+    ]
 
 
 def render(st_module: Any | None = None) -> None:
@@ -128,7 +143,7 @@ def render(st_module: Any | None = None) -> None:
     with st.container(border=True):
         st.subheader("当前数据资产")
         st.dataframe(
-            pd.DataFrame(rows),
+            format_data_foundation_table(rows),
             use_container_width=True,
             hide_index=True,
         )
