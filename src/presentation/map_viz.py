@@ -138,6 +138,10 @@ def _profile_required_fields(spec: MapProfileSpec) -> list[str]:
         spec.advantage_field,
         spec.risk_field,
         spec.level_field,
+        spec.demand_proxy_field,
+        spec.market_stage_field,
+        spec.competition_alert_field,
+        spec.diagnosis_summary_field,
     ]
 
 
@@ -166,6 +170,7 @@ def load_profile_result(spec: MapProfileSpec) -> pd.DataFrame:
         spec.synergy_field,
         spec.competition_score_field,
         spec.score_field,
+        spec.demand_proxy_field,
     ]
     for field in numeric_fields:
         values = pd.to_numeric(frame[field], errors="coerce")
@@ -402,6 +407,10 @@ def _detail_values(
             "metric_synergy": "—",
             "metric_competition": "—",
             "metric_atmosphere": "—",
+            "map_demand_proxy": "—",
+            "map_market_stage": "未进入诊断",
+            "map_competition_alert": "未进入诊断",
+            "map_diagnosis_summary": "该网格尚未采集 POI，不参与区域市场诊断。",
             "map_risk": "尚无评分依据",
         }
     active = bool(row["has_poi_activity"])
@@ -418,6 +427,10 @@ def _detail_values(
             "metric_synergy": "—",
             "metric_competition": "—",
             "metric_atmosphere": "—",
+            "map_demand_proxy": _format_number(row[spec.demand_proxy_field]),
+            "map_market_stage": str(row[spec.market_stage_field]),
+            "map_competition_alert": str(row[spec.competition_alert_field]),
+            "map_diagnosis_summary": str(row[spec.diagnosis_summary_field]),
             "map_risk": str(row[spec.risk_field]),
         }
     return {
@@ -432,6 +445,10 @@ def _detail_values(
         "metric_synergy": _format_number(row[spec.synergy_field]),
         "metric_competition": _format_number(row[spec.competition_score_field]),
         "metric_atmosphere": _format_number(row["business_atmosphere"]),
+        "map_demand_proxy": _format_number(row[spec.demand_proxy_field]),
+        "map_market_stage": str(row[spec.market_stage_field]),
+        "map_competition_alert": str(row[spec.competition_alert_field]),
+        "map_diagnosis_summary": str(row[spec.diagnosis_summary_field]),
         "map_risk": str(row[spec.risk_field]),
     }
 
@@ -772,6 +789,8 @@ def build_amap_map_html(
     const summaryHtml=(p)=>`<div class="map-popup"><strong>${escapeHtml(p.grid_id)}</strong><br>
       区县：${escapeHtml(p.district_name)}<br>数据状态：${escapeHtml(p.map_status)}<br>
       评分：${escapeHtml(p.map_score)}<br>全局排名：${escapeHtml(p.map_rank)}<br>
+      市场阶段：${escapeHtml(p.map_market_stage)}<br>
+      竞争状态：${escapeHtml(p.map_competition_alert)}<br>
       主要优势：${escapeHtml(p.map_advantage)}</div>`;
     const detailHtml=(p)=>`<div class="map-popup"><strong>${escapeHtml(p.grid_id)}</strong><br>
       推荐等级：${escapeHtml(p.map_level)}<br>交通可达性：${escapeHtml(p.metric_traffic)}<br>
@@ -780,6 +799,10 @@ def build_amap_map_html(
       共生业态：${escapeHtml(p.metric_synergy)}<br>
       低竞争得分：${escapeHtml(p.metric_competition)}<br>
       商业氛围：${escapeHtml(p.metric_atmosphere)}<br>
+      需求客群代理：${escapeHtml(p.map_demand_proxy)}<br>
+      市场阶段：${escapeHtml(p.map_market_stage)}<br>
+      竞争状态：${escapeHtml(p.map_competition_alert)}<br>
+      诊断摘要：${escapeHtml(p.map_diagnosis_summary)}<br>
       主要风险：${escapeHtml(p.map_risk)}</div>`;
     AMapLoader.load({key:API_KEY,version:__API_VERSION__,plugins:[]}).then((AMap)=>{
       const map=new AMap.Map("map",{zoom:__DEFAULT_ZOOM__,center:PAYLOAD.center,
@@ -929,6 +952,8 @@ def _add_geojson_layer(
                 "map_status",
                 "map_score",
                 "map_rank",
+                "map_market_stage",
+                "map_competition_alert",
                 "map_advantage",
             ],
             aliases=[
@@ -937,6 +962,8 @@ def _add_geojson_layer(
                 "数据状态",
                 "评分",
                 "全局排名",
+                "市场阶段",
+                "竞争状态",
                 "主要优势",
             ],
             sticky=True,
@@ -953,6 +980,10 @@ def _add_geojson_layer(
                 "metric_synergy",
                 "metric_competition",
                 "metric_atmosphere",
+                "map_demand_proxy",
+                "map_market_stage",
+                "map_competition_alert",
+                "map_diagnosis_summary",
                 "map_risk",
             ],
             aliases=[
@@ -966,6 +997,10 @@ def _add_geojson_layer(
                 "共生业态",
                 "低竞争得分",
                 "商业氛围",
+                "需求客群代理",
+                "市场阶段",
+                "竞争状态",
+                "诊断摘要",
                 "主要风险",
             ],
             localize=True,
@@ -979,6 +1014,8 @@ def _point_tooltip(row: pd.Series, spec: MapProfileSpec) -> str:
         f"区县：{html.escape(str(row['district_name']))}<br>"
         f"评分：{_format_number(row[spec.score_field])}<br>"
         f"全局排名：{_format_rank(row[spec.rank_field])}<br>"
+        f"市场阶段：{html.escape(str(row[spec.market_stage_field]))}<br>"
+        f"竞争状态：{html.escape(str(row[spec.competition_alert_field]))}<br>"
         f"主要优势：{html.escape(str(row[spec.advantage_field]))}"
     )
 
@@ -999,6 +1036,10 @@ def _point_popup(row: pd.Series, spec: MapProfileSpec) -> str:
             f"共生业态：{details['metric_synergy']}",
             f"低竞争得分：{details['metric_competition']}",
             f"商业氛围：{details['metric_atmosphere']}",
+            f"需求客群代理：{details['map_demand_proxy']}",
+            f"市场阶段：{html.escape(details['map_market_stage'])}",
+            f"竞争状态：{html.escape(details['map_competition_alert'])}",
+            f"诊断摘要：{html.escape(details['map_diagnosis_summary'])}",
             f"主要风险：{html.escape(details['map_risk'])}",
         ]
     )

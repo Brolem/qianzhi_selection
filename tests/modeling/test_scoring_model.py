@@ -156,6 +156,43 @@ class ScoringModelTests(unittest.TestCase):
 
         self.assertAlmostEqual(result.loc[0, "profile_score"], 31.5)
 
+    def test_score_profile_adds_diagnostics_without_changing_weighted_score(self):
+        frame = make_scoring_input(rows=6)
+        traffic_only = make_profile(
+            profile_id="traffic_only",
+            weights=make_weights(),
+        )
+        consumption_only = make_profile(
+            profile_id="consumption_only",
+            weights=make_weights(
+                traffic_accessibility=0.0,
+                consumption_potential=1.0,
+            ),
+        )
+
+        traffic = scoring_model.score_profile(frame, traffic_only)
+        consumption = scoring_model.score_profile(frame, consumption_only)
+
+        for field in [
+            "profile_demand_customer_proxy",
+            "profile_market_stage",
+            "profile_competition_alert",
+            "profile_diagnosis_summary",
+        ]:
+            self.assertIn(field, traffic)
+        self.assertEqual(
+            traffic["profile_market_stage"].tolist(),
+            consumption["profile_market_stage"].tolist(),
+        )
+        self.assertEqual(
+            traffic["profile_competition_alert"].tolist(),
+            consumption["profile_competition_alert"].tolist(),
+        )
+        self.assertEqual(
+            traffic["profile_score"].tolist(),
+            frame["traffic_accessibility"].astype(float).tolist(),
+        )
+
     def test_ranking_is_deterministic_and_inactive_grids_have_no_rank(self):
         frame = make_scoring_input(rows=4, inactive_indices=[3])
         frame.loc[0:2, "traffic_accessibility"] = 50.0
@@ -237,6 +274,9 @@ class ScoringModelTests(unittest.TestCase):
         self.assertIn("light_food_score", result)
         self.assertIn("convenience_main_advantage", result)
         self.assertIn("light_food_main_risk", result)
+        self.assertIn("convenience_market_stage", result)
+        self.assertIn("light_food_competition_alert", result)
+        self.assertIn("convenience_diagnosis_summary", result)
         self.assertNotIn("main_advantage", result)
         self.assertNotIn("main_risk", result)
 
@@ -255,6 +295,24 @@ class ScoringModelTests(unittest.TestCase):
         self.assertEqual(
             summary.loc[0, "top_profile_grid_id"],
             scored.sort_values("profile_rank").iloc[0]["grid_id"],
+        )
+        stage_total = sum(
+            int(summary.loc[0, field])
+            for field in [
+                "market_gap_grid_count",
+                "cultivation_grid_count",
+                "mature_grid_count",
+                "general_observation_grid_count",
+            ]
+        )
+        self.assertEqual(stage_total, int(summary.loc[0, "active_grid_count"]))
+        self.assertEqual(
+            int(summary.loc[0, "over_competition_alert_count"]),
+            int(
+                scored["profile_competition_alert"]
+                .eq("过度竞争预警")
+                .sum()
+            ),
         )
 
     def test_custom_cli_requires_complete_parameter_set(self):
@@ -377,6 +435,11 @@ class ScoringModelTests(unittest.TestCase):
                 [item["profile_id"] for item in metadata["profiles"]],
                 ["convenience", "light_food"],
             )
+            report = paths["report"].read_text(encoding="utf-8")
+            self.assertIn("## 区域市场诊断", report)
+            self.assertIn("市场空白型", report)
+            self.assertIn("过度竞争预警", report)
+            self.assertIn("需求客群代理不是真实客流", report)
 
 
 if __name__ == "__main__":

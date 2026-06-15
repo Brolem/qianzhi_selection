@@ -15,8 +15,22 @@ from typing import Any, Callable, Mapping, Sequence
 
 import pandas as pd
 
-
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
+
+from src.modeling.market_diagnostics import (
+    COMPETITION_ALERT,
+    INACTIVE_COMPETITION_ALERT,
+    INACTIVE_MARKET_STAGE,
+    MARKET_STAGE_CULTIVATION,
+    MARKET_STAGE_GAP,
+    MARKET_STAGE_GENERAL,
+    MARKET_STAGE_MATURE,
+    NO_COMPETITION_ALERT,
+)
+
+
 SUMMARY_PATH = Path("outputs/results/pipeline_run_summary.md")
 TARGET_DISTRICTS = ["云岩区", "南明区", "观山湖区"]
 OFFICIAL_RAW_FILES = [
@@ -342,6 +356,10 @@ def validate_pipeline_outputs(
             "has_poi_activity",
             "convenience_rank",
             "light_food_rank",
+            "convenience_market_stage",
+            "convenience_competition_alert",
+            "light_food_market_stage",
+            "light_food_competition_alert",
         ],
     )
     if len(scores) != 60:
@@ -366,6 +384,41 @@ def validate_pipeline_outputs(
         if ranks.loc[activity].isna().any():
             raise PipelineValidationError(
                 f"{score_path} 中活跃网格缺少 {rank_field}"
+            )
+    market_stages = {
+        MARKET_STAGE_GAP,
+        MARKET_STAGE_CULTIVATION,
+        MARKET_STAGE_MATURE,
+        MARKET_STAGE_GENERAL,
+    }
+    competition_alerts = {
+        COMPETITION_ALERT,
+        NO_COMPETITION_ALERT,
+    }
+    for prefix in ["convenience", "light_food"]:
+        stage_field = f"{prefix}_market_stage"
+        alert_field = f"{prefix}_competition_alert"
+        active_stages = set(scores.loc[activity, stage_field].astype(str))
+        active_alerts = set(scores.loc[activity, alert_field].astype(str))
+        if not active_stages.issubset(market_stages):
+            raise PipelineValidationError(
+                f"{score_path} 中 {stage_field} 包含无效市场阶段"
+            )
+        if not active_alerts.issubset(competition_alerts):
+            raise PipelineValidationError(
+                f"{score_path} 中 {alert_field} 包含无效竞争状态"
+            )
+        inactive_stages = set(scores.loc[~activity, stage_field].astype(str))
+        inactive_alerts = set(scores.loc[~activity, alert_field].astype(str))
+        if inactive_stages != {INACTIVE_MARKET_STAGE}:
+            raise PipelineValidationError(
+                f"{score_path} 中无活动网格的 {stage_field} 必须为"
+                f" {INACTIVE_MARKET_STAGE}"
+            )
+        if inactive_alerts != {INACTIVE_COMPETITION_ALERT}:
+            raise PipelineValidationError(
+                f"{score_path} 中无活动网格的 {alert_field} 必须为"
+                f" {INACTIVE_COMPETITION_ALERT}"
             )
 
     for map_name in [

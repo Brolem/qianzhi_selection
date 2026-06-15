@@ -251,6 +251,10 @@ def make_map_spec(
         risk_field="profile_main_risk",
         level_field="profile_recommendation_level",
         synergy_field="convenience_synergy_score",
+        demand_proxy_field="profile_demand_customer_proxy",
+        market_stage_field="profile_market_stage",
+        competition_alert_field="profile_competition_alert",
+        diagnosis_summary_field="profile_diagnosis_summary",
     )
 
 
@@ -281,6 +285,16 @@ def write_report_result(path: Path) -> Path:
                 "convenience_main_advantage": "交通可达性",
                 "convenience_main_risk": "消费潜力不足",
                 "convenience_recommendation_level": "推荐" if index < 9 else "暂不推荐",
+                "convenience_demand_customer_proxy": 50.0 if active else 0.0,
+                "convenience_market_stage": "一般观察型" if active else "无 POI 活动",
+                "convenience_competition_alert": (
+                    "未触发过度竞争预警" if active else "不参与诊断"
+                ),
+                "convenience_diagnosis_summary": (
+                    "一般观察型；未触发过度竞争预警。"
+                    if active
+                    else "无 POI 活动，不参与区域市场诊断。"
+                ),
             }
         )
     pd.DataFrame(rows).to_csv(path, index=False, encoding="utf-8-sig")
@@ -312,6 +326,10 @@ def make_report_spec(result_path: Path) -> MapProfileSpec:
         risk_field="convenience_main_risk",
         level_field="convenience_recommendation_level",
         synergy_field="convenience_synergy_score",
+        demand_proxy_field="convenience_demand_customer_proxy",
+        market_stage_field="convenience_market_stage",
+        competition_alert_field="convenience_competition_alert",
+        diagnosis_summary_field="convenience_diagnosis_summary",
     )
 
 

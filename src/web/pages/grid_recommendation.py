@@ -74,6 +74,10 @@ class RecommendationView:
     advantage_field: str
     risk_field: str
     level_field: str
+    demand_proxy_field: str
+    market_stage_field: str
+    competition_alert_field: str
+    diagnosis_summary_field: str
 
 
 def load_scoring_input(path=SCORING_INPUT_PATH) -> pd.DataFrame:
@@ -87,7 +91,11 @@ def ranked_recommendation_rows(
     rank_field: str,
     district_rank_field: str,
     district_name: str,
-    limit: int,
+    limit: int | None,
+    market_stage_field: str | None = None,
+    competition_alert_field: str | None = None,
+    market_stage: str = "全部",
+    competition_alert: str = "全部",
 ) -> pd.DataFrame:
     """Return active rows ordered by global or district rank."""
     required = [
@@ -107,20 +115,126 @@ def ranked_recommendation_rows(
             result["district_name"].astype(str).eq(district_name)
         ]
         selected_rank = district_rank_field
+    if market_stage != "全部":
+        if not market_stage_field or market_stage_field not in result:
+            raise KeyError("评分结果缺少市场阶段字段")
+        result = result.loc[result[market_stage_field].astype(str).eq(market_stage)]
+    if competition_alert != "全部":
+        if not competition_alert_field or competition_alert_field not in result:
+            raise KeyError("评分结果缺少竞争状态字段")
+        result = result.loc[
+            result[competition_alert_field].astype(str).eq(competition_alert)
+        ]
     result[selected_rank] = pd.to_numeric(
         result[selected_rank],
         errors="coerce",
     )
     result = result.loc[result[selected_rank].notna()].copy()
     result["grid_id"] = result["grid_id"].astype(str)
-    return (
-        result.sort_values(
-            [selected_rank, "grid_id"],
-            ascending=[True, True],
-            kind="mergesort",
+    result = result.sort_values(
+        [selected_rank, "grid_id"],
+        ascending=[True, True],
+        kind="mergesort",
+    )
+    if limit is not None:
+        result = result.head(limit)
+    return result.reset_index(drop=True)
+
+
+def diagnostic_summary_counts(
+    frame: pd.DataFrame,
+    *,
+    market_stage_field: str,
+    competition_alert_field: str,
+) -> dict[str, int]:
+    """Count active-grid market stages and competition alerts."""
+    required = [
+        "has_poi_activity",
+        market_stage_field,
+        competition_alert_field,
+    ]
+    missing = [field for field in required if field not in frame]
+    if missing:
+        raise KeyError("评分结果缺少字段：" + ", ".join(missing))
+    active = frame.loc[activity_mask(frame["has_poi_activity"])]
+    stages = active[market_stage_field].astype(str).value_counts()
+    return {
+        "市场空白型": int(stages.get("市场空白型", 0)),
+        "待培育型": int(stages.get("待培育型", 0)),
+        "成熟商圈型": int(stages.get("成熟商圈型", 0)),
+        "一般观察型": int(stages.get("一般观察型", 0)),
+        "过度竞争预警": int(
+            active[competition_alert_field].astype(str).eq("过度竞争预警").sum()
+        ),
+    }
+
+
+def _diagnostic_summary_html(summary: dict[str, int]) -> str:
+    """Render five compact market-diagnosis cards with stable semantics."""
+    styles = {
+        "市场空白型": "is-gap",
+        "待培育型": "is-cultivation",
+        "成熟商圈型": "is-mature",
+        "一般观察型": "is-general",
+        "过度竞争预警": "is-alert",
+    }
+    cards = []
+    for label, class_name in styles.items():
+        cards.append(
+            f'<article class="workbench-diagnostic-card {class_name}">'
+            f'<span class="workbench-diagnostic-label">{escape(label)}</span>'
+            f'<strong class="workbench-diagnostic-value">'
+            f"{int(summary.get(label, 0))}</strong>"
+            "</article>"
         )
-        .head(limit)
-        .reset_index(drop=True)
+    return (
+        '<section class="workbench-diagnostic-grid">'
+        + "".join(cards)
+        + "</section>"
+    )
+
+
+def _weight_budget_html(
+    *,
+    total: Decimal,
+    remaining: Decimal,
+) -> str:
+    """Render the 100-point weight budget as a progress and compact summary."""
+    progress = min(max(float(total), 0.0), 100.0)
+    complete = total == Decimal("100.00")
+    over = remaining < 0
+    progress_class = (
+        "is-complete" if complete else "is-over" if over else "is-preview"
+    )
+    balance_label = "超出" if over else "剩余"
+    balance_value = abs(remaining)
+    save_label = "可保存" if complete else "仅预览"
+    save_class = "is-ready" if complete else "is-preview"
+    return (
+        '<section class="workbench-budget-panel">'
+        '<div class="workbench-budget-heading">'
+        '<span>权重预算</span>'
+        f"<strong>{total:.2f} / 100.00</strong>"
+        "</div>"
+        '<div class="workbench-budget-track" aria-label="权重预算进度">'
+        f'<span class="workbench-budget-progress {progress_class}" '
+        f'style="width:{progress:.2f}%"></span>'
+        "</div>"
+        '<div class="workbench-budget-summary">'
+        '<div class="workbench-budget-item">'
+        '<span class="workbench-budget-label">已分配</span>'
+        f'<strong class="workbench-budget-value">{total:.2f}%</strong>'
+        "</div>"
+        f'<div class="workbench-budget-item {"is-over" if over else ""}">'
+        f'<span class="workbench-budget-label">{balance_label}</span>'
+        f'<strong class="workbench-budget-value">{balance_value:.2f}%</strong>'
+        "</div>"
+        f'<div class="workbench-budget-item {save_class}">'
+        '<span class="workbench-budget-label">保存状态</span>'
+        f'<strong class="workbench-budget-value is-text">{save_label}</strong>'
+        "</div>"
+        "</div>"
+        "</section>"
     )
 
 
@@ -174,6 +288,10 @@ def _view_from_result_profile(profile: ResultProfileSpec) -> RecommendationView:
         profile.advantage_field,
         profile.risk_field,
         profile.level_field,
+        profile.demand_proxy_field,
+        profile.market_stage_field,
+        profile.competition_alert_field,
+        profile.diagnosis_summary_field,
     ]
     frame = load_required_csv(profile.result_path, required)
     return RecommendationView(
@@ -190,6 +308,10 @@ def _view_from_result_profile(profile: ResultProfileSpec) -> RecommendationView:
         advantage_field=profile.advantage_field,
         risk_field=profile.risk_field,
         level_field=profile.level_field,
+        demand_proxy_field=profile.demand_proxy_field,
+        market_stage_field=profile.market_stage_field,
+        competition_alert_field=profile.competition_alert_field,
+        diagnosis_summary_field=profile.diagnosis_summary_field,
     )
 
 
@@ -212,6 +334,10 @@ def _view_from_preview(
         advantage_field="profile_main_advantage",
         risk_field="profile_main_risk",
         level_field="profile_recommendation_level",
+        demand_proxy_field="profile_demand_customer_proxy",
+        market_stage_field="profile_market_stage",
+        competition_alert_field="profile_competition_alert",
+        diagnosis_summary_field="profile_diagnosis_summary",
     )
 
 
@@ -352,6 +478,12 @@ def _decision_summary_html(
         "推荐": "is-success",
         "谨慎推荐": "is-warning",
     }.get(level, "is-neutral")
+    competition_alert = str(selected[view.competition_alert_field])
+    alert_badge_class = (
+        "is-warning"
+        if competition_alert == "过度竞争预警"
+        else "is-neutral"
+    )
     return (
         '<section class="workbench-decision-summary">'
         '<div class="workbench-decision-label">综合评价</div>'
@@ -363,6 +495,12 @@ def _decision_summary_html(
         f'<span class="workbench-rank">全局 #{int(selected[view.rank_field])}</span>'
         f'<span class="workbench-status-badge {badge_class}">'
         f"{escape(level)}</span>"
+        "</div>"
+        '<div class="workbench-decision-meta">'
+        f'<span class="workbench-status-badge is-neutral">'
+        f"{escape(str(selected[view.market_stage_field]))}</span>"
+        f'<span class="workbench-status-badge {alert_badge_class}">'
+        f"{escape(competition_alert)}</span>"
         "</div>"
         "</section>"
     )
@@ -438,15 +576,9 @@ def _render_custom_builder(
     percentages = _current_percentages(st)
     total = percentage_total(percentages)
     remaining = Decimal("100.00") - total
-    status_columns = st.columns(3, gap="medium")
-    status_columns[0].metric("已分配", f"{total:.2f}%")
-    if remaining >= 0:
-        status_columns[1].metric("剩余", f"{remaining:.2f}%")
-    else:
-        status_columns[1].metric("超出", f"{abs(remaining):.2f}%")
-    status_columns[2].metric(
-        "保存状态",
-        "可保存" if total == Decimal("100.00") else "仅预览",
+    _render_html(
+        st,
+        _weight_budget_html(total=total, remaining=remaining),
     )
 
     if total == 0:
@@ -551,6 +683,8 @@ def _result_table(
         view.advantage_field,
         view.risk_field,
         view.level_field,
+        view.market_stage_field,
+        view.competition_alert_field,
     ]
     missing = [field for field in columns if field not in rows.columns]
     if missing:
@@ -570,8 +704,24 @@ def _result_table(
             view.advantage_field: "主要优势",
             view.risk_field: "主要风险",
             view.level_field: "推荐等级",
+            view.market_stage_field: "市场阶段",
+            view.competition_alert_field: "竞争状态",
         }
     )
+
+
+def detail_grid_labels(
+    rows: pd.DataFrame,
+    view: RecommendationView,
+) -> dict[str, str]:
+    """Build detail selector labels from the currently displayed rows."""
+    return {
+        str(row["grid_id"]): (
+            f"{row['district_name']}｜全局第 {int(row[view.rank_field])} 名｜"
+            f"{float(row[view.score_field]):.2f} 分"
+        )
+        for _, row in rows.iterrows()
+    }
 
 
 def _render_results(st: Any, view: RecommendationView) -> None:
@@ -581,20 +731,57 @@ def _render_results(st: Any, view: RecommendationView) -> None:
     districts = sorted(
         active["district_name"].dropna().astype(str).unique().tolist()
     )
-    district_name = st.selectbox(
-        "推荐范围",
-        ["全部", *districts],
-        key="grid_recommendation_district",
+    summary = diagnostic_summary_counts(
+        active,
+        market_stage_field=view.market_stage_field,
+        competition_alert_field=view.competition_alert_field,
     )
-    limit = 10 if district_name == "全部" else 5
+    _render_html(st, _diagnostic_summary_html(summary))
+
+    filter_columns = st.columns(3, gap="medium")
+    with filter_columns[0]:
+        district_name = st.selectbox(
+            "推荐范围",
+            ["全部", *districts],
+            key="grid_recommendation_district",
+        )
+    with filter_columns[1]:
+        market_stage = st.selectbox(
+            "市场阶段",
+            ["全部", "市场空白型", "待培育型", "成熟商圈型", "一般观察型"],
+            key="grid_recommendation_market_stage",
+        )
+    with filter_columns[2]:
+        competition_alert = st.selectbox(
+            "竞争状态",
+            ["全部", "过度竞争预警", "未触发过度竞争预警"],
+            key="grid_recommendation_competition_alert",
+        )
+    diagnostic_filter_enabled = (
+        market_stage != "全部" or competition_alert != "全部"
+    )
+    limit = None if diagnostic_filter_enabled else (
+        10 if district_name == "全部" else 5
+    )
     rows = ranked_recommendation_rows(
         view.frame,
         rank_field=view.rank_field,
         district_rank_field=view.district_rank_field,
         district_name=district_name,
         limit=limit,
+        market_stage_field=view.market_stage_field,
+        competition_alert_field=view.competition_alert_field,
+        market_stage=market_stage,
+        competition_alert=competition_alert,
     )
-    heading = "全局 Top 10" if district_name == "全部" else f"{district_name} Top 5"
+    if diagnostic_filter_enabled:
+        heading = f"诊断筛选结果（{len(rows)} 个网格）"
+    else:
+        heading = (
+            "全局 Top 10"
+            if district_name == "全部"
+            else f"{district_name} Top 5"
+        )
     st.subheader(heading)
     st.dataframe(
         _result_table(rows, view, district_name=district_name),
@@ -602,31 +789,18 @@ def _render_results(st: Any, view: RecommendationView) -> None:
         hide_index=True,
     )
 
-    all_ranked = ranked_recommendation_rows(
-        view.frame,
-        rank_field=view.rank_field,
-        district_rank_field=view.district_rank_field,
-        district_name="全部",
-        limit=len(view.frame),
-    )
-    if all_ranked.empty:
-        st.warning("当前评分方案没有可展示的活跃网格。")
+    if rows.empty:
+        st.warning("当前筛选条件没有可展示的活跃网格。")
         return
-    labels = {
-        str(row["grid_id"]): (
-            f"{row['district_name']}｜全局第 {int(row[view.rank_field])} 名｜"
-            f"{float(row[view.score_field]):.2f} 分"
-        )
-        for _, row in all_ranked.iterrows()
-    }
+    labels = detail_grid_labels(rows, view)
     selected_grid = st.selectbox(
         "查看网格六维分解",
         list(labels),
         format_func=labels.get,
         key=f"grid_breakdown_{view.profile_id}",
     )
-    selected = all_ranked.loc[
-        all_ranked["grid_id"].astype(str).eq(selected_grid)
+    selected = rows.loc[
+        rows["grid_id"].astype(str).eq(selected_grid)
     ].iloc[0]
     _render_selected_grid_detail(st, selected, view)
     explanation_columns = st.columns(2, gap="large")

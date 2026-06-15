@@ -75,6 +75,7 @@ SECTION_EVIDENCE_FIELDS = {
         "recommendation.global_rank",
         "recommendation.district_rank",
         "recommendation.level",
+        "diagnosis.market_stage",
     },
     "traffic_accessibility": {"metrics.traffic_accessibility"},
     "consumption_potential": {"metrics.consumption_potential"},
@@ -85,6 +86,8 @@ SECTION_EVIDENCE_FIELDS = {
     "competition": {
         "metrics.competition_pressure",
         "metrics.competition_score",
+        "diagnosis.demand_customer_proxy",
+        "diagnosis.competition_alert",
     },
     "business_atmosphere": {
         "metrics.business_atmosphere",
@@ -93,6 +96,7 @@ SECTION_EVIDENCE_FIELDS = {
     "strengths_and_risks": {
         "recommendation.main_advantage",
         "recommendation.main_risk",
+        "diagnosis.diagnosis_summary",
     },
     "limitations": {
         "official_data.scope",
@@ -250,6 +254,10 @@ def _required_fields(profile: ResultProfileSpec) -> list[str]:
         profile.advantage_field,
         profile.risk_field,
         profile.level_field,
+        profile.demand_proxy_field,
+        profile.market_stage_field,
+        profile.competition_alert_field,
+        profile.diagnosis_summary_field,
     ]
 
 
@@ -370,9 +378,27 @@ def build_report_payload(
             "main_advantage": _value(record, profile.advantage_field),
             "main_risk": _value(record, profile.risk_field),
         },
+        "diagnosis": {
+            "demand_customer_proxy": _value(
+                record,
+                profile.demand_proxy_field,
+            ),
+            "market_stage": _value(record, profile.market_stage_field),
+            "competition_alert": _value(
+                record,
+                profile.competition_alert_field,
+            ),
+            "diagnosis_summary": _value(
+                record,
+                profile.diagnosis_summary_field,
+            ),
+            "method": "全市有 POI 活动网格三分位相对分层",
+        },
         "official_data": dict(official_context),
         "method_boundaries": [
             "employment_customer_proxy 是由写字楼、商场、学校、餐饮等 POI 构成的就业/办公客群代理，不是真实就业人口密度。",
+            "demand_customer_proxy 是消费潜力与就业/办公客群代理的均值，只用于相对分层，不是真实客流。",
+            "市场阶段和竞争状态由程序按全市活跃网格三分位规则生成，报告模型不得修改标签。",
             "结果只支持当前关键词 POI 样本统一口径下的相对评价，不代表完整设施总量。",
             "结果不是租金、客流、营收或盈利预测，也不是门牌号级推荐。",
         ],
@@ -443,6 +469,8 @@ def build_report_system_prompt() -> str:
 5. competition_pressure 越高表示同类设施越集中、竞争压力越高。
 6. 低竞争得分 = 100 - 竞争压力；越高表示相对竞争压力越低，不得与竞争压力混淆。
 7. business_atmosphere 是商业类 POI 的相对集聚代理，不代表真实营收或商圈等级。
+8. diagnosis.demand_customer_proxy 是消费潜力与就业/办公客群代理的均值，只用于相对分层，不是真实客流。
+9. diagnosis.market_stage、diagnosis.competition_alert 和 diagnosis.diagnosis_summary 均由程序生成。
 </metric_dictionary>
 
 <evidence_rules>
@@ -451,6 +479,7 @@ def build_report_system_prompt() -> str:
 3. 输入没有提供的信息必须表述为需要现场调研核验，不得推断道路等级、路网密度、社区出入口、租金、真实客流、收入、营收、盈利或具体铺位。
 4. 不得把高综合得分解释为保证经营成功。
 5. 经营建议必须分别依据 recommendation.main_advantage 或 recommendation.main_risk，且每项都要给出 basis_fields。
+6. 不得修改程序生成的诊断标签，不得把需求客群代理解释为真实客流。
 </evidence_rules>
 
 <section_rules>
@@ -711,6 +740,7 @@ def render_report_markdown(
     grid = payload["grid"]
     metrics = payload["metrics"]
     recommendation = payload["recommendation"]
+    diagnosis = payload["diagnosis"]
     sections = analysis["sections"]
     weights = payload["profile"]["weights"]
     weight_text = "、".join(
@@ -741,6 +771,7 @@ def render_report_markdown(
 - 全局排名：第 {int(float(recommendation['global_rank']))} 位
 - 区县排名：第 {int(float(recommendation['district_rank']))} 位
 - 推荐等级：{recommendation['level']}
+- 市场阶段：{diagnosis['market_stage']}
 
 {sections['business_fit']['analysis']}
 
@@ -776,7 +807,10 @@ def render_report_markdown(
 
 - 竞争压力：{_format_number(metrics['competition_pressure'])}
 - 低竞争得分：{_format_number(metrics['competition_score'])}
+- 需求客群代理：{_format_number(diagnosis['demand_customer_proxy'])}
+- 竞争状态：{diagnosis['competition_alert']}
 - 指标方向：竞争压力越高表示同类设施越集中；低竞争得分越高表示相对竞争压力越低。
+- 诊断口径：需求客群代理只用于全市有 POI 活动网格的相对分层，不是真实客流。
 
 {sections['competition']['analysis']}
 
@@ -791,6 +825,7 @@ def render_report_markdown(
 
 - 主要优势：{recommendation['main_advantage']}
 - 主要风险：{recommendation['main_risk']}
+- 区域诊断：{diagnosis['diagnosis_summary']}
 
 {sections['strengths_and_risks']['analysis']}
 
@@ -802,7 +837,7 @@ def render_report_markdown(
 
 {sections['limitations']['analysis']}
 
-官方宏观与就业数据当前为{official_context['scope']}，只作整体市场背景与数据适用边界说明，不参与网格评分，也不用于制造区县差异。网格结果来自关键词 POI 样本统一口径下的相对评价，不代表完整设施总量，不是租金、客流、营收或盈利预测，也不是门牌号级推荐。
+官方宏观与就业数据当前为{official_context['scope']}，只作整体市场背景与数据适用边界说明，不参与网格评分，也不用于制造区县差异。市场阶段和竞争状态是程序基于全市有 POI 活动网格三分位生成的相对标签，需求客群代理不是真实客流。网格结果来自关键词 POI 样本统一口径下的相对评价，不代表完整设施总量，不是租金、客流、营收或盈利预测，也不是门牌号级推荐。
 """
     return validate_report_content(content)
 
@@ -817,6 +852,7 @@ def generate_template_report(
     grid = payload["grid"]
     metrics = payload["metrics"]
     recommendation = payload["recommendation"]
+    diagnosis = payload["diagnosis"]
     weights = payload["profile"]["weights"]
     weight_text = "、".join(
         f"{WEIGHT_LABELS[field]} {float(weights[field]) * 100:.0f}%"
@@ -835,7 +871,7 @@ def generate_template_report(
 
 {REPORT_HEADINGS[1]}
 
-当前评分方案为“{profile.profile_name}”，综合得分 {_format_number(recommendation['score'])}，全局排名第 {int(float(recommendation['global_rank']))}，区县排名第 {int(float(recommendation['district_rank']))}，推荐等级为“{recommendation['level']}”。
+当前评分方案为“{profile.profile_name}”，综合得分 {_format_number(recommendation['score'])}，全局排名第 {int(float(recommendation['global_rank']))}，区县排名第 {int(float(recommendation['district_rank']))}，推荐等级为“{recommendation['level']}”。程序诊断的市场阶段为“{diagnosis['market_stage']}”。
 
 {REPORT_HEADINGS[2]}
 
@@ -855,7 +891,7 @@ def generate_template_report(
 
 {REPORT_HEADINGS[6]}
 
-竞争压力为 {_format_number(metrics['competition_pressure'])}，转换后的低竞争得分为 {_format_number(metrics['competition_score'])}。该结果不代表企业真实经营状态。
+竞争压力为 {_format_number(metrics['competition_pressure'])}，转换后的低竞争得分为 {_format_number(metrics['competition_score'])}。需求客群代理为 {_format_number(diagnosis['demand_customer_proxy'])}，竞争状态为“{diagnosis['competition_alert']}”。需求客群代理只用于相对分层，不是真实客流；该诊断不代表企业真实经营状态。
 
 {REPORT_HEADINGS[7]}
 
@@ -863,7 +899,7 @@ def generate_template_report(
 
 {REPORT_HEADINGS[8]}
 
-主要优势：{recommendation['main_advantage']}。主要风险：{recommendation['main_risk']}。
+主要优势：{recommendation['main_advantage']}。主要风险：{recommendation['main_risk']}。区域诊断：{diagnosis['diagnosis_summary']}
 
 {REPORT_HEADINGS[9]}
 
@@ -871,7 +907,7 @@ def generate_template_report(
 
 {REPORT_HEADINGS[10]}
 
-官方宏观与就业数据当前为贵州省级，只作整体市场背景与数据适用边界说明，不参与网格评分，也不用于制造区县差异。网格结果来自关键词 POI 样本统一口径下的相对评价，不代表完整设施总量，不是租金、客流、营收或盈利预测，也不是门牌号级推荐。
+官方宏观与就业数据当前为贵州省级，只作整体市场背景与数据适用边界说明，不参与网格评分，也不用于制造区县差异。市场阶段和竞争状态是程序基于全市有 POI 活动网格三分位生成的相对标签，需求客群代理不是真实客流。网格结果来自关键词 POI 样本统一口径下的相对评价，不代表完整设施总量，不是租金、客流、营收或盈利预测，也不是门牌号级推荐。
 """
 
 

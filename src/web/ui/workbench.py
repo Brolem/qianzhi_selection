@@ -309,6 +309,156 @@ WORKBENCH_CSS = """
   background: #E9EDF2;
 }
 
+.workbench-budget-panel {
+  margin: 12px 0 16px;
+  padding: 13px 15px 12px;
+  background: var(--workbench-surface);
+  border: 1px solid var(--workbench-border);
+  border-radius: 6px;
+  box-shadow: 0 1px 3px rgba(19, 34, 56, 0.05);
+}
+
+.workbench-budget-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  color: var(--workbench-muted);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.workbench-budget-heading strong {
+  color: var(--workbench-text);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.workbench-budget-track {
+  height: 7px;
+  margin: 9px 0 12px;
+  overflow: hidden;
+  background: #E7ECF2;
+  border-radius: 999px;
+}
+
+.workbench-budget-progress {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--workbench-blue);
+}
+
+.workbench-budget-progress.is-complete {
+  background: var(--workbench-success);
+}
+
+.workbench-budget-progress.is-over {
+  background: var(--workbench-danger);
+}
+
+.workbench-budget-summary {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.workbench-budget-item {
+  min-width: 0;
+  padding: 8px 10px;
+  background: #F7F9FC;
+  border-left: 3px solid #AFC4EE;
+  border-radius: 4px;
+}
+
+.workbench-budget-item.is-ready {
+  background: #EEF8F3;
+  border-left-color: var(--workbench-success);
+}
+
+.workbench-budget-item.is-over {
+  background: #FEF1F0;
+  border-left-color: var(--workbench-danger);
+}
+
+.workbench-budget-label {
+  display: block;
+  color: var(--workbench-muted);
+  font-size: 11px;
+  line-height: 1.35;
+}
+
+.workbench-budget-value {
+  display: block;
+  margin-top: 2px;
+  color: var(--workbench-text);
+  font-size: 20px;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.workbench-budget-value.is-text {
+  font-size: 17px;
+}
+
+.workbench-diagnostic-grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 8px;
+  margin: 10px 0 14px;
+}
+
+.workbench-diagnostic-card {
+  min-width: 0;
+  padding: 9px 11px;
+  background: var(--workbench-surface);
+  border: 1px solid var(--workbench-border);
+  border-left: 4px solid #94A3B8;
+  border-radius: 5px;
+}
+
+.workbench-diagnostic-card.is-gap {
+  background: #EDF8F3;
+  border-left-color: #23855F;
+}
+
+.workbench-diagnostic-card.is-cultivation {
+  background: #FFF8E8;
+  border-left-color: #C58A18;
+}
+
+.workbench-diagnostic-card.is-mature {
+  background: #EBF2FC;
+  border-left-color: #326FC2;
+}
+
+.workbench-diagnostic-card.is-general {
+  background: #F2F4F7;
+  border-left-color: #7A8798;
+}
+
+.workbench-diagnostic-card.is-alert {
+  background: #FEF0EF;
+  border-left-color: #C2443A;
+}
+
+.workbench-diagnostic-label {
+  display: block;
+  overflow-wrap: anywhere;
+  color: var(--workbench-muted);
+  font-size: 11px;
+  line-height: 1.35;
+}
+
+.workbench-diagnostic-value {
+  display: block;
+  margin-top: 3px;
+  color: var(--workbench-text);
+  font-size: 22px;
+  font-weight: 700;
+  line-height: 1.1;
+}
+
 .st-key-report-content [data-testid="stMarkdownContainer"] {
   color: var(--workbench-text);
   font-size: 15px;
@@ -353,7 +503,8 @@ WORKBENCH_CSS = """
   }
 
   .workbench-metric-grid,
-  .workbench-flow {
+  .workbench-flow,
+  .workbench-diagnostic-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
@@ -395,7 +546,9 @@ WORKBENCH_CSS = """
   }
 
   .workbench-metric-grid,
-  .workbench-flow {
+  .workbench-flow,
+  .workbench-diagnostic-grid,
+  .workbench-budget-summary {
     grid-template-columns: minmax(0, 1fr);
   }
 

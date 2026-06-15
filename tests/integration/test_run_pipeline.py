@@ -305,6 +305,34 @@ class RunPipelineTests(unittest.TestCase):
         )
         self.assertNotIn(str(root), str(metrics))
 
+    def test_validation_requires_market_diagnostic_fields(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            root = Path(tmp_dir)
+            self._write_final_outputs(
+                root,
+                district_count=3,
+                spatial_grid_count=790,
+                active_grid_count=41,
+            )
+            score_path = (
+                root
+                / "outputs"
+                / "results"
+                / "grid_stage_score_result.csv"
+            )
+            scores = pd.read_csv(score_path)
+            scores = scores.drop(columns=["convenience_market_stage"])
+            scores.to_csv(score_path, index=False)
+
+            with self.assertRaisesRegex(
+                self.pipeline.PipelineValidationError,
+                "convenience_market_stage",
+            ):
+                self.pipeline.validate_pipeline_outputs(
+                    project_root=root,
+                    online_refresh=False,
+                )
+
     def _write_baseline_inputs(self, root: Path) -> None:
         processed = root / "data" / "processed"
         processed.mkdir(parents=True)
@@ -395,6 +423,22 @@ class RunPipelineTests(unittest.TestCase):
                 "light_food_rank": [
                     index + 1 if value else None
                     for index, value in enumerate(active)
+                ],
+                "convenience_market_stage": [
+                    "一般观察型" if value else "无 POI 活动"
+                    for value in active
+                ],
+                "convenience_competition_alert": [
+                    "未触发过度竞争预警" if value else "不参与诊断"
+                    for value in active
+                ],
+                "light_food_market_stage": [
+                    "一般观察型" if value else "无 POI 活动"
+                    for value in active
+                ],
+                "light_food_competition_alert": [
+                    "未触发过度竞争预警" if value else "不参与诊断"
+                    for value in active
                 ],
             }
         )

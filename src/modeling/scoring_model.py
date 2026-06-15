@@ -25,6 +25,14 @@ from src.core.config import (
     get_weights,
     load_config,
 )
+from src.modeling.market_diagnostics import (
+    COMPETITION_ALERT,
+    MARKET_STAGE_CULTIVATION,
+    MARKET_STAGE_GAP,
+    MARKET_STAGE_GENERAL,
+    MARKET_STAGE_MATURE,
+    diagnose_market,
+)
 
 
 WEIGHT_FIELDS = [
@@ -52,6 +60,10 @@ PROFILE_RESULT_FIELDS = [
     "profile_main_advantage",
     "profile_main_risk",
     "profile_recommendation_level",
+    "profile_demand_customer_proxy",
+    "profile_market_stage",
+    "profile_competition_alert",
+    "profile_diagnosis_summary",
 ]
 DEFAULT_TEMPLATES = {
     "community_retail": {
@@ -296,7 +308,12 @@ def score_profile(
         result["profile_rank"],
         int(active.sum()),
     )
-    return result
+    diagnosed, _ = diagnose_market(
+        result,
+        synergy_field=synergy_field,
+        competition_field=competition_field,
+    )
+    return diagnosed
 
 
 def build_default_grid_result(
@@ -317,6 +334,10 @@ def build_default_grid_result(
         "profile_main_advantage": "main_advantage",
         "profile_main_risk": "main_risk",
         "profile_recommendation_level": "recommendation_level",
+        "profile_demand_customer_proxy": "demand_customer_proxy",
+        "profile_market_stage": "market_stage",
+        "profile_competition_alert": "competition_alert",
+        "profile_diagnosis_summary": "diagnosis_summary",
     }
     for profile_id in ["convenience", "light_food"]:
         scored = score_profile(scoring_input, profiles[profile_id], templates)
@@ -336,6 +357,8 @@ def build_profile_district_summary(scored: pd.DataFrame) -> pd.DataFrame:
             "has_poi_activity",
             "profile_score",
             "district_profile_rank",
+            "profile_market_stage",
+            "profile_competition_alert",
         ],
     )
     rows: list[dict[str, Any]] = []
@@ -361,9 +384,39 @@ def build_profile_district_summary(scored: pd.DataFrame) -> pd.DataFrame:
                 "poi_total_count": int(
                     pd.to_numeric(group["poi_total_count"], errors="raise").sum()
                 ),
+                "market_gap_grid_count": int(
+                    active["profile_market_stage"].eq(MARKET_STAGE_GAP).sum()
+                ),
+                "cultivation_grid_count": int(
+                    active["profile_market_stage"]
+                    .eq(MARKET_STAGE_CULTIVATION)
+                    .sum()
+                ),
+                "mature_grid_count": int(
+                    active["profile_market_stage"].eq(MARKET_STAGE_MATURE).sum()
+                ),
+                "general_observation_grid_count": int(
+                    active["profile_market_stage"].eq(MARKET_STAGE_GENERAL).sum()
+                ),
+                "over_competition_alert_count": int(
+                    active["profile_competition_alert"]
+                    .eq(COMPETITION_ALERT)
+                    .sum()
+                ),
             }
         )
-    return pd.DataFrame(rows)
+    summary = pd.DataFrame(rows)
+    stage_fields = [
+        "market_gap_grid_count",
+        "cultivation_grid_count",
+        "mature_grid_count",
+        "general_observation_grid_count",
+    ]
+    if not summary.empty and not summary[stage_fields].sum(axis=1).eq(
+        summary["active_grid_count"]
+    ).all():
+        raise ValueError("区县市场阶段数量之和必须等于 active_grid_count")
+    return summary
 
 
 def build_default_district_summary(
@@ -383,11 +436,15 @@ def build_default_district_summary(
                 *base_fields,
                 f"{profile_id}_score",
                 f"{profile_id}_district_rank",
+                f"{profile_id}_market_stage",
+                f"{profile_id}_competition_alert",
             ]
         ].rename(
             columns={
                 f"{profile_id}_score": "profile_score",
                 f"{profile_id}_district_rank": "district_profile_rank",
+                f"{profile_id}_market_stage": "profile_market_stage",
+                f"{profile_id}_competition_alert": "profile_competition_alert",
             }
         )
         summaries[profile_id] = build_profile_district_summary(profile_frame)
@@ -396,6 +453,15 @@ def build_default_district_summary(
         columns={
             "avg_profile_score": "avg_convenience_score",
             "top_profile_grid_id": "top_convenience_grid_id",
+            "market_gap_grid_count": "convenience_market_gap_grid_count",
+            "cultivation_grid_count": "convenience_cultivation_grid_count",
+            "mature_grid_count": "convenience_mature_grid_count",
+            "general_observation_grid_count": (
+                "convenience_general_observation_grid_count"
+            ),
+            "over_competition_alert_count": (
+                "convenience_over_competition_alert_count"
+            ),
         }
     )
     food = summaries["light_food"][
@@ -403,11 +469,25 @@ def build_default_district_summary(
             "district_name",
             "avg_profile_score",
             "top_profile_grid_id",
+            "market_gap_grid_count",
+            "cultivation_grid_count",
+            "mature_grid_count",
+            "general_observation_grid_count",
+            "over_competition_alert_count",
         ]
     ].rename(
         columns={
             "avg_profile_score": "avg_light_food_score",
             "top_profile_grid_id": "top_light_food_grid_id",
+            "market_gap_grid_count": "light_food_market_gap_grid_count",
+            "cultivation_grid_count": "light_food_cultivation_grid_count",
+            "mature_grid_count": "light_food_mature_grid_count",
+            "general_observation_grid_count": (
+                "light_food_general_observation_grid_count"
+            ),
+            "over_competition_alert_count": (
+                "light_food_over_competition_alert_count"
+            ),
         }
     )
     return convenience.merge(food, on="district_name", validate="one_to_one")
@@ -441,6 +521,31 @@ def _append_top_rows(
             f"- {getattr(row, rank_field)}. {row.grid_id}（{row.district_name}，"
             f"{getattr(row, score_field):.2f} 分）"
         )
+
+
+def _append_diagnostic_summary(
+    lines: list[str],
+    scored: pd.DataFrame,
+    *,
+    profile_name: str,
+    market_stage_field: str,
+    competition_alert_field: str,
+) -> None:
+    active = scored.loc[scored["has_poi_activity"].astype(bool)]
+    counts = active[market_stage_field].value_counts()
+    lines.extend(
+        [
+            f"### {profile_name}",
+            "",
+            f"- 市场空白型：{int(counts.get(MARKET_STAGE_GAP, 0))} 个。",
+            f"- 待培育型：{int(counts.get(MARKET_STAGE_CULTIVATION, 0))} 个。",
+            f"- 成熟商圈型：{int(counts.get(MARKET_STAGE_MATURE, 0))} 个。",
+            f"- 一般观察型：{int(counts.get(MARKET_STAGE_GENERAL, 0))} 个。",
+            "- 过度竞争预警："
+            f"{int(active[competition_alert_field].eq(COMPETITION_ALERT).sum())} 个。",
+            "",
+        ]
+    )
 
 
 def build_default_report(
@@ -490,6 +595,30 @@ def build_default_report(
                 5,
             )
             lines.append("")
+
+    lines.extend(["## 区域市场诊断", ""])
+    _append_diagnostic_summary(
+        lines,
+        grid_result,
+        profile_name="社区便利店",
+        market_stage_field="convenience_market_stage",
+        competition_alert_field="convenience_competition_alert",
+    )
+    _append_diagnostic_summary(
+        lines,
+        grid_result,
+        profile_name="轻餐饮",
+        market_stage_field="light_food_market_stage",
+        competition_alert_field="light_food_competition_alert",
+    )
+    lines.extend(
+        [
+            "- 市场阶段与竞争预警使用全市活跃网格三分位阈值，只作相对诊断。",
+            "- 需求客群代理不是真实客流，由消费潜力和就业客群代理等权平均得到。",
+            "- 区域诊断不改变综合得分、推荐等级和排名。",
+            "",
+        ]
+    )
 
     convenience_top = set(
         grid_result.loc[
@@ -550,6 +679,22 @@ def build_custom_report(
             5,
         )
         lines.append("")
+    lines.extend(["## 区域市场诊断", ""])
+    _append_diagnostic_summary(
+        lines,
+        scored,
+        profile_name=profile.profile_name,
+        market_stage_field="profile_market_stage",
+        competition_alert_field="profile_competition_alert",
+    )
+    lines.extend(
+        [
+            "- 市场阶段与竞争预警使用全市活跃网格三分位阈值，只作相对诊断。",
+            "- 需求客群代理不是真实客流，由消费潜力和就业客群代理等权平均得到。",
+            "- 自定义权重不改变相同指标模板下的区域诊断结果。",
+            "",
+        ]
+    )
     lines.extend(
         [
             "## 数据边界",

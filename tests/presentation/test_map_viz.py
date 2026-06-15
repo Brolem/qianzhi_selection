@@ -59,12 +59,36 @@ def make_default_result(path: Path) -> Path:
                 "convenience_main_advantage": "消费潜力" if active else "未检测到POI活动",
                 "convenience_main_risk": "竞争压力较高" if active else "缺少可用于推荐的POI活动",
                 "convenience_recommendation_level": "推荐" if rank == 1 else "暂不推荐",
+                "convenience_demand_customer_proxy": score,
+                "convenience_market_stage": (
+                    "成熟商圈型" if active else "无 POI 活动"
+                ),
+                "convenience_competition_alert": (
+                    "过度竞争预警" if active else "不参与诊断"
+                ),
+                "convenience_diagnosis_summary": (
+                    "成熟商圈型；过度竞争预警"
+                    if active
+                    else "无 POI 活动；不参与诊断"
+                ),
                 "light_food_score": score,
                 "light_food_rank": rank,
                 "light_food_district_rank": rank,
                 "light_food_main_advantage": "就业客群代理" if active else "未检测到POI活动",
                 "light_food_main_risk": "交通可达性不足" if active else "缺少可用于推荐的POI活动",
                 "light_food_recommendation_level": "推荐" if rank == 1 else "暂不推荐",
+                "light_food_demand_customer_proxy": score,
+                "light_food_market_stage": (
+                    "成熟商圈型" if active else "无 POI 活动"
+                ),
+                "light_food_competition_alert": (
+                    "过度竞争预警" if active else "不参与诊断"
+                ),
+                "light_food_diagnosis_summary": (
+                    "成熟商圈型；过度竞争预警"
+                    if active
+                    else "无 POI 活动；不参与诊断"
+                ),
             }
         )
     pd.DataFrame(rows).to_csv(path, index=False, encoding="utf-8-sig")
@@ -114,6 +138,14 @@ def make_custom_result(path: Path, profile_id: str = "custom_01") -> Path:
     custom["profile_main_advantage"] = ["消费潜力", "未检测到POI活动", "交通可达性"]
     custom["profile_main_risk"] = ["竞争压力较高", "缺少可用于推荐的POI活动", "消费潜力不足"]
     custom["profile_recommendation_level"] = ["推荐", "暂不推荐", "暂不推荐"]
+    custom["profile_demand_customer_proxy"] = [82.0, 0.0, 34.0]
+    custom["profile_market_stage"] = ["成熟商圈型", "无 POI 活动", "一般观察型"]
+    custom["profile_competition_alert"] = ["过度竞争预警", "不参与诊断", "未触发过度竞争预警"]
+    custom["profile_diagnosis_summary"] = [
+        "成熟商圈型；过度竞争预警",
+        "无 POI 活动；不参与诊断",
+        "一般观察型；未触发过度竞争预警",
+    ]
     custom.to_csv(path, index=False, encoding="utf-8-sig")
     write_metadata(
         path.parent / "profile_metadata.json",
@@ -364,6 +396,8 @@ class MapVizTests(unittest.TestCase):
             self.assertIn("map_advantage", html)
             self.assertIn("map_risk", html)
             self.assertIn("map_level", html)
+            self.assertIn("map_market_stage", html)
+            self.assertIn("map_competition_alert", html)
             self.assertIn("metric_consumption", html)
             self.assertIn("top-rank-badge", html)
             self.assertIn("pointer-events:none", html)
@@ -393,6 +427,9 @@ class MapVizTests(unittest.TestCase):
             )
             self.assertEqual(len(payload["top_markers"]), 1)
             self.assertEqual(payload["top_markers"][0]["rank"], 1)
+            first = payload["geojson"]["features"][0]["properties"]
+            self.assertEqual(first["map_market_stage"], "成熟商圈型")
+            self.assertEqual(first["map_competition_alert"], "过度竞争预警")
 
     def test_build_amap_map_html_contains_loader_interactions_and_safe_json(self):
         with tempfile.TemporaryDirectory() as tmp_dir:
@@ -431,6 +468,8 @@ class MapVizTests(unittest.TestCase):
             self.assertIn("click", html)
             self.assertIn("top-rank-badge", html)
             self.assertIn("社区便利店评分图例", html)
+            self.assertIn("市场阶段", html)
+            self.assertIn("竞争状态", html)
             self.assertIn("GCJ-02", html)
             self.assertNotIn(">60-80<", html)
             self.assertNotIn(">80-100<", html)

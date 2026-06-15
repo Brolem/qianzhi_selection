@@ -1,5 +1,6 @@
 import tempfile
 import unittest
+from decimal import Decimal
 from pathlib import Path
 
 import pandas as pd
@@ -16,7 +17,11 @@ from src.web.pages.district_compare import (
 )
 from src.web.pages.grid_recommendation import (
     _metric_chart,
+    _diagnostic_summary_html,
     _render_selected_grid_detail,
+    _weight_budget_html,
+    detail_grid_labels,
+    diagnostic_summary_counts,
     metric_breakdown_data,
     ranked_recommendation_rows,
 )
@@ -41,6 +46,10 @@ class ProfileSpec:
     level_field = "profile_recommendation_level"
     synergy_field = "convenience_synergy_score"
     competition_pressure_field = "convenience_competition_pressure"
+    demand_proxy_field = "profile_demand_customer_proxy"
+    market_stage_field = "profile_market_stage"
+    competition_alert_field = "profile_competition_alert"
+    diagnosis_summary_field = "profile_diagnosis_summary"
 
     def __init__(self, result_path):
         self.result_path = result_path
@@ -52,6 +61,43 @@ def write_csv(path: Path, rows: list[dict]) -> Path:
 
 
 class WorkbenchPageTests(unittest.TestCase):
+    def test_weight_budget_html_uses_progress_and_compact_status_items(self):
+        content = _weight_budget_html(
+            total=Decimal("96.00"),
+            remaining=Decimal("4.00"),
+        )
+
+        self.assertIn("workbench-budget-progress", content)
+        self.assertIn("width:96.00%", content)
+        self.assertIn("已分配", content)
+        self.assertIn("96.00%", content)
+        self.assertIn("剩余", content)
+        self.assertIn("4.00%", content)
+        self.assertIn("仅预览", content)
+
+    def test_diagnostic_summary_html_uses_five_semantic_compact_cards(self):
+        content = _diagnostic_summary_html(
+            {
+                "市场空白型": 1,
+                "待培育型": 12,
+                "成熟商圈型": 12,
+                "一般观察型": 16,
+                "过度竞争预警": 12,
+            }
+        )
+
+        self.assertEqual(content.count("workbench-diagnostic-card "), 5)
+        for class_name in [
+            "is-gap",
+            "is-cultivation",
+            "is-mature",
+            "is-general",
+            "is-alert",
+        ]:
+            self.assertIn(class_name, content)
+        self.assertIn("市场空白型", content)
+        self.assertIn(">1<", content)
+
     def test_load_required_csv_reports_exact_missing_path_and_field(self):
         with tempfile.TemporaryDirectory() as tmp_dir:
             base = Path(tmp_dir)
@@ -472,6 +518,86 @@ class WorkbenchPageTests(unittest.TestCase):
         self.assertEqual(global_rows["grid_id"].tolist(), ["g1", "g2", "g3"])
         self.assertEqual(district_rows["grid_id"].tolist(), ["g2", "g1"])
 
+    def test_diagnostic_filters_return_all_matches_in_original_rank_order(self):
+        frame = pd.DataFrame(
+            [
+                {
+                    "grid_id": "g1",
+                    "district_name": "甲区",
+                    "has_poi_activity": True,
+                    "profile_rank": 1,
+                    "district_profile_rank": 1,
+                    "profile_market_stage": "成熟商圈型",
+                    "profile_competition_alert": "过度竞争预警",
+                },
+                {
+                    "grid_id": "g2",
+                    "district_name": "甲区",
+                    "has_poi_activity": True,
+                    "profile_rank": 2,
+                    "district_profile_rank": 2,
+                    "profile_market_stage": "成熟商圈型",
+                    "profile_competition_alert": "未触发过度竞争预警",
+                },
+                {
+                    "grid_id": "g3",
+                    "district_name": "乙区",
+                    "has_poi_activity": True,
+                    "profile_rank": 3,
+                    "district_profile_rank": 1,
+                    "profile_market_stage": "市场空白型",
+                    "profile_competition_alert": "未触发过度竞争预警",
+                },
+            ]
+        )
+
+        rows = ranked_recommendation_rows(
+            frame,
+            rank_field="profile_rank",
+            district_rank_field="district_profile_rank",
+            district_name="全部",
+            limit=None,
+            market_stage_field="profile_market_stage",
+            competition_alert_field="profile_competition_alert",
+            market_stage="成熟商圈型",
+            competition_alert="过度竞争预警",
+        )
+        summary = diagnostic_summary_counts(
+            frame,
+            market_stage_field="profile_market_stage",
+            competition_alert_field="profile_competition_alert",
+        )
+
+        self.assertEqual(rows["grid_id"].tolist(), ["g1"])
+        self.assertEqual(summary["成熟商圈型"], 2)
+        self.assertEqual(summary["市场空白型"], 1)
+        self.assertEqual(summary["过度竞争预警"], 1)
+
+    def test_detail_options_follow_the_current_diagnostic_result_rows(self):
+        rows = pd.DataFrame(
+            [
+                {
+                    "grid_id": "gap_grid",
+                    "district_name": "甲区",
+                    "profile_rank": 9,
+                    "profile_score": 52.5,
+                }
+            ]
+        )
+        view = type(
+            "View",
+            (),
+            {
+                "rank_field": "profile_rank",
+                "score_field": "profile_score",
+            },
+        )()
+
+        labels = detail_grid_labels(rows, view)
+
+        self.assertEqual(list(labels), ["gap_grid"])
+        self.assertIn("全局第 9 名", labels["gap_grid"])
+
     def test_metric_breakdown_uses_positive_competition_score(self):
         row = pd.Series(
             {
@@ -535,6 +661,8 @@ class WorkbenchPageTests(unittest.TestCase):
                 "level_field": "profile_recommendation_level",
                 "synergy_field": "convenience_synergy_score",
                 "competition_score_field": "profile_competition_score",
+                "market_stage_field": "profile_market_stage",
+                "competition_alert_field": "profile_competition_alert",
             },
         )()
         selected = pd.Series(
@@ -548,6 +676,8 @@ class WorkbenchPageTests(unittest.TestCase):
                 "convenience_synergy_score": 96,
                 "profile_competition_score": 0,
                 "business_atmosphere": 99,
+                "profile_market_stage": "成熟商圈型",
+                "profile_competition_alert": "过度竞争预警",
             }
         )
         st = FakeStreamlit()
@@ -559,6 +689,8 @@ class WorkbenchPageTests(unittest.TestCase):
         self.assertIn("83.03", st.html_calls[0])
         self.assertIn("全局 #1", st.html_calls[0])
         self.assertIn("推荐", st.html_calls[0])
+        self.assertIn("成熟商圈型", st.html_calls[0])
+        self.assertIn("过度竞争预警", st.html_calls[0])
         self.assertEqual(st.chart_count, 1)
 
         chart_spec = _metric_chart(

@@ -59,6 +59,10 @@ class ResultProfileSpec:
     risk_field: str
     level_field: str
     synergy_field: str
+    demand_proxy_field: str
+    market_stage_field: str
+    competition_alert_field: str
+    diagnosis_summary_field: str
 
 
 def _validated_weights(value: Any, path: Path, profile_id: str) -> dict[str, float]:
@@ -159,6 +163,10 @@ def _default_spec(
         risk_field=f"{prefix}_main_risk",
         level_field=f"{prefix}_recommendation_level",
         synergy_field=fields["synergy_field"],
+        demand_proxy_field=f"{prefix}_demand_customer_proxy",
+        market_stage_field=f"{prefix}_market_stage",
+        competition_alert_field=f"{prefix}_competition_alert",
+        diagnosis_summary_field=f"{prefix}_diagnosis_summary",
     )
 
 
@@ -251,6 +259,10 @@ def discover_custom_profile_specs(
             risk_field="profile_main_risk",
             level_field="profile_recommendation_level",
             synergy_field=template_fields["synergy_field"],
+            demand_proxy_field="profile_demand_customer_proxy",
+            market_stage_field="profile_market_stage",
+            competition_alert_field="profile_competition_alert",
+            diagnosis_summary_field="profile_diagnosis_summary",
         )
     return result
 

@@ -40,6 +40,10 @@ def make_profile(result_path: Path, profile_id: str = "convenience") -> ResultPr
         risk_field="profile_main_risk" if custom else "convenience_main_risk",
         level_field="profile_recommendation_level" if custom else "convenience_recommendation_level",
         synergy_field="convenience_synergy_score",
+        demand_proxy_field="profile_demand_customer_proxy" if custom else "convenience_demand_customer_proxy",
+        market_stage_field="profile_market_stage" if custom else "convenience_market_stage",
+        competition_alert_field="profile_competition_alert" if custom else "convenience_competition_alert",
+        diagnosis_summary_field="profile_diagnosis_summary" if custom else "convenience_diagnosis_summary",
     )
 
 
@@ -75,6 +79,14 @@ def write_result(path: Path, active: bool = True, custom: bool = False) -> Path:
                 "profile_main_advantage": "消费潜力",
                 "profile_main_risk": "竞争压力较高",
                 "profile_recommendation_level": "推荐" if active else "暂不推荐",
+                "profile_demand_customer_proxy": 81.5 if active else 0.0,
+                "profile_market_stage": "成熟商圈型" if active else "无 POI 活动",
+                "profile_competition_alert": "过度竞争预警" if active else "不参与诊断",
+                "profile_diagnosis_summary": (
+                    "成熟商圈型；触发过度竞争预警。"
+                    if active
+                    else "无 POI 活动，不参与区域市场诊断。"
+                ),
             }
         )
     else:
@@ -87,6 +99,14 @@ def write_result(path: Path, active: bool = True, custom: bool = False) -> Path:
                 "convenience_main_advantage": "消费潜力",
                 "convenience_main_risk": "竞争压力较高",
                 "convenience_recommendation_level": "推荐" if active else "暂不推荐",
+                "convenience_demand_customer_proxy": 81.5 if active else 0.0,
+                "convenience_market_stage": "成熟商圈型" if active else "无 POI 活动",
+                "convenience_competition_alert": "过度竞争预警" if active else "不参与诊断",
+                "convenience_diagnosis_summary": (
+                    "成熟商圈型；触发过度竞争预警。"
+                    if active
+                    else "无 POI 活动，不参与区域市场诊断。"
+                ),
             }
         )
     pd.DataFrame([row]).to_csv(path, index=False, encoding="utf-8-sig")
@@ -110,6 +130,7 @@ def valid_analysis_payload() -> dict:
                     "profile.profile_name",
                     "recommendation.level",
                     "recommendation.global_rank",
+                    "diagnosis.market_stage",
                 ],
             },
             "traffic_accessibility": {
@@ -133,6 +154,8 @@ def valid_analysis_payload() -> dict:
                 "evidence_fields": [
                     "metrics.competition_pressure",
                     "metrics.competition_score",
+                    "diagnosis.demand_customer_proxy",
+                    "diagnosis.competition_alert",
                 ],
             },
             "business_atmosphere": {
@@ -147,6 +170,7 @@ def valid_analysis_payload() -> dict:
                 "evidence_fields": [
                     "recommendation.main_advantage",
                     "recommendation.main_risk",
+                    "diagnosis.diagnosis_summary",
                 ],
             },
             "operating_suggestions": {
@@ -256,12 +280,17 @@ class ReportGeneratorTests(unittest.TestCase):
                 "employment_customer_proxy",
                 "贵州省级",
                 "不参与网格评分",
+                "demand_customer_proxy",
+                "成熟商圈型",
+                "过度竞争预警",
             ]:
                 self.assertIn(text, prompt)
             self.assertIn("# 云岩区 社区便利店选址报告", result.content)
             self.assertIn("综合得分：83.00", result.content)
             self.assertIn("竞争压力：31.00", result.content)
             self.assertIn("低竞争得分：69.00", result.content)
+            self.assertIn("市场阶段：成熟商圈型", result.content)
+            self.assertIn("竞争状态：过度竞争预警", result.content)
             self.assertIn(
                 "交通配套类兴趣点形成了较强的相对支撑。",
                 result.content,
@@ -422,8 +451,38 @@ class ReportGeneratorTests(unittest.TestCase):
                 "关键词 POI 样本",
                 "不是门牌号级推荐",
                 "就业/办公客群代理",
+                "需求客群代理",
+                "不是真实客流",
+                "市场阶段",
+                "竞争状态",
             ]:
                 self.assertIn(text, result.content)
+
+    def test_report_payload_uses_program_generated_market_diagnosis(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            result_path = write_result(Path(tmp_dir) / "result.csv")
+            profile = make_profile(result_path)
+            record = report_generator.load_profile_results(profile).iloc[0].to_dict()
+
+            payload = report_generator.build_report_payload(
+                record,
+                profile,
+                {
+                    "scope": "贵州省级",
+                    "usage": "不参与网格评分",
+                },
+            )
+
+            self.assertEqual(payload["diagnosis"]["demand_customer_proxy"], 81.5)
+            self.assertEqual(payload["diagnosis"]["market_stage"], "成熟商圈型")
+            self.assertEqual(
+                payload["diagnosis"]["competition_alert"],
+                "过度竞争预警",
+            )
+            self.assertIn(
+                "不得修改程序生成的诊断标签",
+                report_generator.build_report_system_prompt(),
+            )
 
     def test_inactive_grid_and_missing_key_stop_generation(self):
         with tempfile.TemporaryDirectory() as tmp_dir:

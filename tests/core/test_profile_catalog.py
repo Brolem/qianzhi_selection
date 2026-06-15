@@ -60,6 +60,10 @@ def write_custom_result(path: Path, profile_id: str = "custom_01") -> Path:
                 "profile_main_advantage": "交通可达性",
                 "profile_main_risk": "商业氛围不足",
                 "profile_recommendation_level": "推荐",
+                "profile_demand_customer_proxy": 65.0,
+                "profile_market_stage": "一般观察型",
+                "profile_competition_alert": "未触发过度竞争预警",
+                "profile_diagnosis_summary": "一般观察型；未触发过度竞争预警",
             }
         ]
     ).to_csv(path, index=False, encoding="utf-8-sig")
@@ -104,6 +108,14 @@ class ProfileCatalogTests(unittest.TestCase):
                 convenience.synergy_field,
                 "convenience_synergy_score",
             )
+            self.assertEqual(
+                convenience.market_stage_field,
+                "convenience_market_stage",
+            )
+            self.assertEqual(
+                convenience.competition_alert_field,
+                "convenience_competition_alert",
+            )
             self.assertEqual(convenience.weights, WEIGHTS)
             self.assertEqual(
                 specs["light_food"].rank_field,
@@ -136,6 +148,10 @@ class ProfileCatalogTests(unittest.TestCase):
             self.assertEqual(
                 spec.competition_pressure_field,
                 "convenience_competition_pressure",
+            )
+            self.assertEqual(
+                spec.diagnosis_summary_field,
+                "profile_diagnosis_summary",
             )
             self.assertEqual(spec.weights, WEIGHTS)
 
