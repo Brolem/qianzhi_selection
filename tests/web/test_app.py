@@ -17,6 +17,7 @@ from src.app import (
 )
 from src.presentation.report_generator import ReportGenerationResult
 from src.presentation.map_viz import MapProfileSpec
+from src.web.pages.grid_recommendation import render as render_grid_recommendation_page
 from src.web.pages.report_center import (
     _report_preview_html,
     build_report_preview,
@@ -52,22 +53,28 @@ class FakeStreamlit:
         self.html_calls = []
         self.chart_calls = []
         self.link_button_calls = []
+        self.dataframe_calls = []
+        self.successes = []
 
     def header(self, text):
         self.headers.append(text)
 
-    def selectbox(self, label, options, index=0, key=None):
-        del key
+    def success(self, text):
+        self.successes.append(text)
+
+    def selectbox(self, label, options, index=0, key=None, format_func=None):
+        del key, format_func
         options = list(options)
         self.selectboxes[label] = options
         self.selectbox_label = label
         self.selectbox_options = options
         self.selectbox_index = index
         if isinstance(self.selected_label, dict):
-            return self.selected_label.get(label, options[index])
+            selected = self.selected_label.get(label, options[index])
+            return selected if selected in options else options[index]
         if self.selected_label is None:
             return options[index]
-        return self.selected_label
+        return self.selected_label if self.selected_label in options else options[index]
 
     def error(self, text):
         self.errors.append(text)
@@ -86,6 +93,9 @@ class FakeStreamlit:
 
     def altair_chart(self, chart, **kwargs):
         self.chart_calls.append((chart, kwargs))
+
+    def dataframe(self, frame, **kwargs):
+        self.dataframe_calls.append((frame.copy(), kwargs))
 
     def subheader(self, text):
         self.subheaders.append(text)
@@ -157,6 +167,12 @@ class FakeComponents:
 
 
 class FakeContext:
+    def info(self, text):
+        self.info_text = text
+
+    def warning(self, text):
+        self.warning_text = text
+
     def __enter__(self):
         return self
 
@@ -803,6 +819,122 @@ class AppHelperTests(unittest.TestCase):
             )
             self.assertEqual(generator.call_args.kwargs["use_llm"], False)
             self.assertEqual(fallback.markdowns, ["# 模板报告"])
+
+    def test_render_grid_recommendation_page_uses_full_district_ranking_and_fixed_table_height(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            base = Path(tmp_dir)
+            result_path = base / "result.csv"
+            scoring_path = base / "scoring.csv"
+            rows = []
+            for index in range(1, 7):
+                rows.append(
+                    {
+                        "grid_id": f"g{index}",
+                        "district_name": "甲区",
+                        "centroid_lon": 106.7,
+                        "centroid_lat": 26.6,
+                        "area_km2": 1.0,
+                        "data_source": "amap_boundary",
+                        "poi_total_count": 10,
+                        "has_poi_activity": True,
+                        "traffic_accessibility": 50.0,
+                        "consumption_potential": 50.0,
+                        "employment_customer_proxy": 50.0,
+                        "business_atmosphere": 50.0,
+                        "convenience_synergy_score": 50.0,
+                        "light_food_synergy_score": 50.0,
+                        "convenience_competition_pressure": 50.0,
+                        "convenience_competition_score": 50.0,
+                        "light_food_competition_pressure": 50.0,
+                        "convenience_score": 100.0 - index,
+                        "convenience_rank": index,
+                        "convenience_district_rank": index,
+                        "convenience_main_advantage": "交通可达性",
+                        "convenience_main_risk": "竞争压力较高",
+                        "convenience_recommendation_level": "推荐",
+                        "convenience_demand_customer_proxy": 50.0,
+                        "convenience_market_stage": "一般观察型",
+                        "convenience_competition_alert": "未触发过度竞争预警",
+                        "convenience_diagnosis_summary": "一般观察型；未触发过度竞争预警。",
+                    }
+                )
+            pd.DataFrame(rows).to_csv(result_path, index=False, encoding="utf-8-sig")
+            pd.DataFrame(
+                [
+                    {
+                        "grid_id": "g1",
+                        "district_name": "甲区",
+                        "poi_total_count": 10,
+                        "has_poi_activity": True,
+                        "traffic_accessibility": 50.0,
+                        "consumption_potential": 50.0,
+                        "employment_customer_proxy": 50.0,
+                        "business_atmosphere": 50.0,
+                        "convenience_synergy_score": 50.0,
+                        "light_food_synergy_score": 50.0,
+                        "convenience_competition_pressure": 50.0,
+                        "light_food_competition_pressure": 50.0,
+                    }
+                ]
+            ).to_csv(scoring_path, index=False, encoding="utf-8-sig")
+            spec = MapProfileSpec(
+                profile_id="convenience",
+                profile_name="社区便利店",
+                template_id="community_retail",
+                weights={
+                    "traffic_accessibility": 0.20,
+                    "consumption_potential": 0.25,
+                    "employment_customer_proxy": 0.10,
+                    "synergy_score": 0.20,
+                    "competition_pressure": 0.15,
+                    "business_atmosphere": 0.10,
+                },
+                result_path=result_path,
+                metadata_path=base / "profile_metadata.json",
+                static_html_path=None,
+                score_field="convenience_score",
+                rank_field="convenience_rank",
+                district_rank_field="convenience_district_rank",
+                competition_score_field="convenience_competition_score",
+                competition_pressure_field="convenience_competition_pressure",
+                advantage_field="convenience_main_advantage",
+                risk_field="convenience_main_risk",
+                level_field="convenience_recommendation_level",
+                synergy_field="convenience_synergy_score",
+                demand_proxy_field="convenience_demand_customer_proxy",
+                market_stage_field="convenience_market_stage",
+                competition_alert_field="convenience_competition_alert",
+                diagnosis_summary_field="convenience_diagnosis_summary",
+            )
+            st = FakeStreamlit(
+                selected_label={
+                    "方案来源": "默认｜社区便利店",
+                    "推荐范围": "甲区",
+                    "市场阶段": "全部",
+                    "竞争状态": "全部",
+                    "查看网格六维分解": "g6",
+                }
+            )
+
+            with unittest.mock.patch(
+                "src.web.pages.grid_recommendation.load_scoring_input",
+                return_value=pd.read_csv(scoring_path),
+            ), unittest.mock.patch(
+                "src.web.pages.grid_recommendation.load_profile_options",
+                return_value={"默认｜社区便利店": spec},
+            ):
+                render_grid_recommendation_page(st)
+
+            self.assertIn("甲区全部排名（6 个网格）", st.subheaders)
+            self.assertEqual(
+                st.dataframe_calls[0][0]["网格标识"].tolist(),
+                [f"g{index}" for index in range(1, 7)],
+            )
+            self.assertEqual(st.dataframe_calls[0][1]["height"], 360)
+            self.assertEqual(
+                st.selectboxes["查看网格六维分解"],
+                [f"g{index}" for index in range(1, 7)],
+            )
 
     def test_app_script_imports_when_streamlit_runs_file_path(self):
         project_root = Path(__file__).resolve().parents[2]

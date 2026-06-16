@@ -23,6 +23,7 @@ from src.web.pages.district_compare import (
 )
 from src.web.pages.grid_recommendation import (
     _metric_chart,
+    _render_results,
     _diagnostic_summary_html,
     _render_selected_grid_detail,
     _weight_budget_html,
@@ -69,6 +70,259 @@ def write_csv(path: Path, rows: list[dict]) -> Path:
 
 
 class WorkbenchPageTests(unittest.TestCase):
+    def test_render_results_uses_full_global_ranking_title_and_fixed_table_height(self):
+        class Context:
+            def info(self, text):
+                self.info_text = text
+
+            def warning(self, text):
+                self.warning_text = text
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, exc_type, exc, traceback):
+                return False
+
+        class FakeStreamlit:
+            def __init__(self, selected_label=None):
+                self.selected_label = selected_label or {}
+                self.session_state = {}
+                self.subheaders = []
+                self.dataframes = []
+                self.selectboxes = {}
+                self.html_calls = []
+
+            def html(self, value):
+                self.html_calls.append(value)
+
+            def columns(self, spec, gap=None):
+                count = spec if isinstance(spec, int) else len(spec)
+                return [Context() for _ in range(count)]
+
+            def selectbox(
+                self,
+                label,
+                options,
+                index=0,
+                key=None,
+                format_func=None,
+            ):
+                del key, format_func
+                options = list(options)
+                self.selectboxes[label] = options
+                selected = self.selected_label.get(label, options[index])
+                return selected if selected in options else options[index]
+
+            def subheader(self, text):
+                self.subheaders.append(text)
+
+            def dataframe(self, frame, **kwargs):
+                self.dataframes.append((frame.copy(), kwargs))
+
+            def warning(self, text):
+                self.warning_text = text
+
+            def container(self, border=False):
+                del border
+                return Context()
+
+            def markdown(self, text, **kwargs):
+                del text, kwargs
+
+            def altair_chart(self, chart, width):
+                del chart, width
+
+            def info(self, text):
+                del text
+
+            def link_button(self, label, url, **kwargs):
+                del label, url, kwargs
+                return False
+
+        frame = pd.DataFrame(
+            [
+                {
+                    "grid_id": f"g{index}",
+                    "district_name": "甲区" if index <= 2 else "乙区",
+                    "has_poi_activity": True,
+                    "profile_score": 100 - index,
+                    "profile_rank": index,
+                    "district_profile_rank": index if index <= 2 else index - 2,
+                    "traffic_accessibility": 50.0,
+                    "consumption_potential": 50.0,
+                    "employment_customer_proxy": 50.0,
+                    "convenience_synergy_score": 50.0,
+                    "profile_competition_score": 50.0,
+                    "business_atmosphere": 50.0,
+                    "profile_main_advantage": "交通可达性",
+                    "profile_main_risk": "竞争压力较高",
+                    "profile_recommendation_level": "推荐",
+                    "profile_market_stage": "一般观察型",
+                    "profile_competition_alert": "未触发过度竞争预警",
+                }
+                for index in range(1, 5)
+            ]
+        )
+        view = type(
+            "View",
+            (),
+            {
+                "profile_id": "test_profile",
+                "frame": frame,
+                "score_field": "profile_score",
+                "rank_field": "profile_rank",
+                "district_rank_field": "district_profile_rank",
+                "synergy_field": "convenience_synergy_score",
+                "competition_score_field": "profile_competition_score",
+                "advantage_field": "profile_main_advantage",
+                "risk_field": "profile_main_risk",
+                "level_field": "profile_recommendation_level",
+                "market_stage_field": "profile_market_stage",
+                "competition_alert_field": "profile_competition_alert",
+            },
+        )()
+        st = FakeStreamlit(
+            selected_label={
+                "推荐范围": "全部",
+                "市场阶段": "全部",
+                "竞争状态": "全部",
+                "查看网格六维分解": "g1",
+            }
+        )
+
+        _render_results(st, view)
+
+        self.assertIn("全局全部排名（4 个网格）", st.subheaders)
+        self.assertEqual(st.dataframes[0][0]["网格标识"].tolist(), ["g1", "g2", "g3", "g4"])
+        self.assertEqual(st.dataframes[0][1]["height"], 360)
+
+    def test_render_results_uses_full_district_ranking_and_detail_options(self):
+        class Context:
+            def info(self, text):
+                self.info_text = text
+
+            def warning(self, text):
+                self.warning_text = text
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, exc_type, exc, traceback):
+                return False
+
+        class FakeStreamlit:
+            def __init__(self, selected_label=None):
+                self.selected_label = selected_label or {}
+                self.session_state = {}
+                self.subheaders = []
+                self.dataframes = []
+                self.selectboxes = {}
+
+            def html(self, value):
+                del value
+
+            def columns(self, spec, gap=None):
+                count = spec if isinstance(spec, int) else len(spec)
+                return [Context() for _ in range(count)]
+
+            def selectbox(
+                self,
+                label,
+                options,
+                index=0,
+                key=None,
+                format_func=None,
+            ):
+                del key, format_func
+                options = list(options)
+                self.selectboxes[label] = options
+                selected = self.selected_label.get(label, options[index])
+                return selected if selected in options else options[index]
+
+            def subheader(self, text):
+                self.subheaders.append(text)
+
+            def dataframe(self, frame, **kwargs):
+                self.dataframes.append((frame.copy(), kwargs))
+
+            def warning(self, text):
+                self.warning_text = text
+
+            def container(self, border=False):
+                del border
+                return Context()
+
+            def markdown(self, text, **kwargs):
+                del text, kwargs
+
+            def altair_chart(self, chart, width):
+                del chart, width
+
+            def info(self, text):
+                del text
+
+            def link_button(self, label, url, **kwargs):
+                del label, url, kwargs
+                return False
+
+        frame = pd.DataFrame(
+            [
+                {
+                    "grid_id": f"g{index}",
+                    "district_name": "甲区",
+                    "has_poi_activity": True,
+                    "profile_score": 100 - index,
+                    "profile_rank": index,
+                    "district_profile_rank": index,
+                    "traffic_accessibility": 50.0,
+                    "consumption_potential": 50.0,
+                    "employment_customer_proxy": 50.0,
+                    "convenience_synergy_score": 50.0,
+                    "profile_competition_score": 50.0,
+                    "business_atmosphere": 50.0,
+                    "profile_main_advantage": "交通可达性",
+                    "profile_main_risk": "竞争压力较高",
+                    "profile_recommendation_level": "推荐",
+                    "profile_market_stage": "一般观察型",
+                    "profile_competition_alert": "未触发过度竞争预警",
+                }
+                for index in range(1, 7)
+            ]
+        )
+        view = type(
+            "View",
+            (),
+            {
+                "profile_id": "test_profile",
+                "frame": frame,
+                "score_field": "profile_score",
+                "rank_field": "profile_rank",
+                "district_rank_field": "district_profile_rank",
+                "synergy_field": "convenience_synergy_score",
+                "competition_score_field": "profile_competition_score",
+                "advantage_field": "profile_main_advantage",
+                "risk_field": "profile_main_risk",
+                "level_field": "profile_recommendation_level",
+                "market_stage_field": "profile_market_stage",
+                "competition_alert_field": "profile_competition_alert",
+            },
+        )()
+        st = FakeStreamlit(
+            selected_label={
+                "推荐范围": "甲区",
+                "市场阶段": "全部",
+                "竞争状态": "全部",
+                "查看网格六维分解": "g6",
+            }
+        )
+
+        _render_results(st, view)
+
+        self.assertIn("甲区全部排名（6 个网格）", st.subheaders)
+        self.assertEqual(st.dataframes[0][0]["网格标识"].tolist(), [f"g{index}" for index in range(1, 7)])
+        self.assertEqual(st.selectboxes["查看网格六维分解"], [f"g{index}" for index in range(1, 7)])
+
     def test_coverage_funnel_uses_spatial_sample_and_active_counts(self):
         stages = build_coverage_funnel_data(
             {

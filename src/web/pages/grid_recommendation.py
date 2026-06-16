@@ -38,6 +38,7 @@ from src.web.decision_context import (
 
 
 NEW_CUSTOM_PROFILE = "新建自定义方案"
+RESULT_TABLE_HEIGHT = 360
 TEMPLATE_LABELS = {
     "社区零售型": "community_retail",
     "餐饮服务型": "food_service",
@@ -764,15 +765,12 @@ def _render_results(st: Any, view: RecommendationView) -> None:
     diagnostic_filter_enabled = (
         market_stage != "全部" or competition_alert != "全部"
     )
-    limit = None if diagnostic_filter_enabled else (
-        10 if district_name == "全部" else 5
-    )
     rows = ranked_recommendation_rows(
         view.frame,
         rank_field=view.rank_field,
         district_rank_field=view.district_rank_field,
         district_name=district_name,
-        limit=limit,
+        limit=None,
         market_stage_field=view.market_stage_field,
         competition_alert_field=view.competition_alert_field,
         market_stage=market_stage,
@@ -782,13 +780,14 @@ def _render_results(st: Any, view: RecommendationView) -> None:
         heading = f"诊断筛选结果（{len(rows)} 个网格）"
     else:
         heading = (
-            "全局 Top 10"
+            f"全局全部排名（{len(rows)} 个网格）"
             if district_name == "全部"
-            else f"{district_name} Top 5"
+            else f"{district_name}全部排名（{len(rows)} 个网格）"
         )
     st.subheader(heading)
     st.dataframe(
         _result_table(rows, view, district_name=district_name),
+        height=RESULT_TABLE_HEIGHT,
         width="stretch",
         hide_index=True,
     )
