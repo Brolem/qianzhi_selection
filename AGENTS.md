@@ -193,3 +193,17 @@
 - 改动文件：`D:\Users\Desktop\GZAICp\qianzhi_selection\src\web\pages\grid_recommendation.py`；`D:\Users\Desktop\GZAICp\qianzhi_selection\tests\web\test_workbench_pages.py`；`D:\Users\Desktop\GZAICp\qianzhi_selection\tests\web\test_app.py`；`D:\Users\Desktop\GZAICp\qianzhi_selection\AGENTS.md`。
 - 依据：用户明确批准“网格推荐排名表改为全量排名 + 固定滚动窗口”实施计划；已读取真实 `src\web\pages\grid_recommendation.py` 和相关测试，确认旧实现仍通过 `limit=10` 或 `limit=5` 截断，并显示 `全局 Top 10`、`区县 Top 5` 标题。
 - 验证：先补充 3 个失败测试，覆盖全局全部排名标题、区县全部排名标题、结果表 `height=360` 和详情下拉跟随完整结果集；首次 RED 运行 `python -m unittest tests.web.test_workbench_pages tests.web.test_app -v`，确认旧实现仍显示 `全局 Top 10`、`甲区 Top 5`。修正测试桩后实现页面逻辑，再次运行同一命令，结果为 33 项测试通过。后续完整回归、AST 检查、`git diff --check` 和浏览器验收见本轮最终验证记录。
+
+### 2026-06-17 12:39
+
+- 功能：修复智能报告生成在 DeepSeek 返回结构化 JSON 但分析段自行写入分数、排名、POI 数等数值时直接失败的问题。当前实现改为先解析模型 JSON，再将含数值的分析段落和经营建议自动替换为程序侧生成的非数值说明，然后继续执行既有结构校验与 Markdown 渲染，不改变 11 章结构、真实数据写入方式、评分结果、地图或页面其他行为。
+- 改动文件：`D:\Users\Desktop\GZAICp\qianzhi_selection\src\presentation\report_generator.py`；`D:\Users\Desktop\GZAICp\qianzhi_selection\tests\presentation\test_report_generator.py`；`D:\Users\Desktop\GZAICp\qianzhi_selection\AGENTS.md`。
+- 依据：用户在智能报告页截图中明确反馈“生成智能报告失败”；已读取真实 `src\presentation\report_generator.py` 与 `tests\presentation\test_report_generator.py`。已用真实命令 `python -m src.presentation.report_generator --profile convenience --grid-id grid_520103_000038` 复现失败，并读取 DeepSeek 原始 JSON，确认 `basic_information.analysis` 与 `business_fit.analysis` 中包含模型自行写入的数值文本，触发当前 `InvalidReportContentError`，并非密钥缺失或模型不可用。
+- 验证：已先新增 `test_generate_site_report_repairs_model_written_numbers_in_analysis` 并运行 `python -m unittest tests.presentation.test_report_generator.ReportGeneratorTests.test_generate_site_report_repairs_model_written_numbers_in_analysis -v`，RED 阶段确认为当前实现报错；修复后再次运行同一命令通过。已运行 `python -m unittest discover -s tests -v`，结果为 186 项测试通过；已运行 `python -c "import ast, pathlib; [ast.parse(p.read_text(encoding='utf-8'), filename=str(p)) for p in pathlib.Path('src').rglob('*.py')]; print('syntax ok')"`，输出 `syntax ok`；已再次运行真实命令 `python -m src.presentation.report_generator --profile convenience --grid-id grid_520103_000038`，成功生成 `outputs\reports\convenience\grid_520103_000038_选址报告.md`。`git diff --check` 仅提示 Git 的 LF/CRLF 换行告警，无格式错误。
+
+### 2026-06-17 12:48
+
+- 功能：更新当前主线各级说明文档，将系统架构统一表达为五层架构：数据层、管线层、模型层、报告层和前端层；新增并同步 Mermaid 架构图，明确 `src/core/` 与 `config.yaml` 是横向支撑，不作为单独业务层。本次只修改文档，不修改代码、配置、数据或运行输出。
+- 改动文件：`D:\Users\Desktop\GZAICp\qianzhi_selection\README.md`；`D:\Users\Desktop\GZAICp\qianzhi_selection\docs\系统架构说明.md`；`D:\Users\Desktop\GZAICp\qianzhi_selection\docs\技术路线草图.md`；`D:\Users\Desktop\GZAICp\qianzhi_selection\docs\黔址优选_v2项目说明材料.md`；`D:\Users\Desktop\GZAICp\qianzhi_selection\docs\项目结构说明.md`；`D:\Users\Desktop\GZAICp\qianzhi_selection\docs\推荐项目方案.md`；`D:\Users\Desktop\GZAICp\qianzhi_selection\docs\文档索引.md`；`D:\Users\Desktop\GZAICp\qianzhi_selection\docs\最终交付清单.md`；`D:\Users\Desktop\GZAICp\qianzhi_selection\黔址优选_Codex多步执行指令.md`；`D:\Users\Desktop\GZAICp\qianzhi_selection\AGENTS.md`。
+- 依据：用户明确要求“更新各级文档”并绘制五层系统架构图；已读取真实源码目录 `src\core\`、`src\pipeline\`、`src\modeling\`、`src\presentation\`、`src\web\`，以及当前 README、系统架构说明、技术路线、项目结构说明、项目说明材料、推荐项目方案、最终交付清单和总控文档。当前稳定入口仍为 `python scripts/run_pipeline.py` 与 `streamlit run src/app.py`。
+- 验证：已运行 Markdown 标题结构扫描，确认更新文档标题可检索；已运行架构术语扫描，确认当前主线文档已出现数据层、管线层、模型层、报告层和前端层，并且 `系统架构说明.md`、`技术路线草图.md` 与 `推荐项目方案.md` 均包含 Mermaid 架构图。后续 `git diff --check` 与 `git status --short` 结果见本轮最终回复。

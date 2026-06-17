@@ -337,6 +337,37 @@ class ReportGeneratorTests(unittest.TestCase):
                         json.dumps(payload, ensure_ascii=False)
                     )
 
+    def test_generate_site_report_repairs_model_written_numbers_in_analysis(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            result_path = write_result(Path(tmp_dir) / "result.csv")
+            payload = valid_analysis_payload()
+            payload["sections"]["basic_information"]["analysis"] = (
+                "该网格位于云岩区，面积约1平方公里，POI总数为125个，覆盖12个类别，表明区域内业态相对丰富。"
+            )
+            payload["sections"]["business_fit"]["analysis"] = (
+                "该网格被诊断为成熟商圈型，且综合评分在云岩区排名第5，全市排名第6，属于推荐级别，适合社区便利店业态。"
+            )
+            client = FakeClient([json.dumps(payload, ensure_ascii=False)])
+
+            result = report_generator.generate_site_report(
+                "grid_520103_000078",
+                make_profile(result_path),
+                llm_client=client,
+            )
+
+            self.assertEqual(result.mode, "deepseek")
+            self.assertFalse(result.used_fallback)
+            self.assertIn(
+                "该网格位于云岩区，基础信息完整，可作为当前方案下的有效研判对象。",
+                result.content,
+            )
+            self.assertIn(
+                "当前方案下该网格处于前列，推荐等级与成熟商圈型诊断相互一致，适合社区便利店业态。",
+                result.content,
+            )
+            self.assertNotIn("POI总数为125个", result.content)
+            self.assertNotIn("覆盖12个类别", result.content)
+
     def test_limitations_section_may_state_explicit_method_boundaries(self):
         payload = valid_analysis_payload()
         payload["sections"]["limitations"]["analysis"] = (

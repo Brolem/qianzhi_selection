@@ -412,6 +412,11 @@ def build_report_prompt(
 ) -> str:
     """Build the variable DeepSeek report input."""
     payload = build_report_payload(record, profile, official_context)
+    return build_report_prompt_from_payload(payload)
+
+
+def build_report_prompt_from_payload(payload: Mapping[str, Any]) -> str:
+    """Build the variable DeepSeek report input from one payload."""
     return (
         "<input>\n"
         + json.dumps(payload, ensure_ascii=False, indent=2, default=str)
@@ -520,6 +525,166 @@ def _validate_narrative(text: Any, location: str) -> str:
     return value
 
 
+def _decode_report_analysis(content: Any) -> dict[str, Any]:
+    if isinstance(content, Mapping):
+        analysis = dict(content)
+    else:
+        if not isinstance(content, str) or not content.strip():
+            raise EmptyReportAnalysisError("DeepSeek 返回的结构化分析为空")
+        try:
+            analysis = json.loads(content)
+        except json.JSONDecodeError as exc:
+            raise InvalidReportContentError(
+                "DeepSeek 返回内容不是有效 JSON"
+            ) from exc
+    if not isinstance(analysis, dict):
+        raise InvalidReportContentError("DeepSeek 分析顶层必须是 JSON 对象")
+    return analysis
+
+
+def _score_band(value: Any) -> str:
+    numeric = float(value)
+    if numeric >= 67:
+        return "较强"
+    if numeric >= 34:
+        return "中等"
+    return "偏弱"
+
+
+def _rank_band(value: Any) -> str:
+    numeric = int(float(value))
+    if numeric <= 10:
+        return "处于前列"
+    if numeric <= 20:
+        return "处于中上游"
+    return "具备一定比较优势"
+
+
+def _fallback_section_analysis(
+    section_key: str,
+    report_payload: Mapping[str, Any],
+) -> str:
+    grid = report_payload["grid"]
+    metrics = report_payload["metrics"]
+    recommendation = report_payload["recommendation"]
+    diagnosis = report_payload["diagnosis"]
+    profile = report_payload["profile"]
+    if section_key == "basic_information":
+        return (
+            f"该网格位于{grid['district_name']}，基础信息完整，可作为当前方案下的有效研判对象。"
+        )
+    if section_key == "business_fit":
+        return (
+            f"当前方案下该网格{_rank_band(recommendation['global_rank'])}，"
+            f"推荐等级与{diagnosis['market_stage']}诊断相互一致，"
+            f"适合{profile['profile_name']}业态。"
+        )
+    if section_key == "traffic_accessibility":
+        return (
+            f"交通可达性表现{_score_band(metrics['traffic_accessibility'])}，"
+            "交通设施对到店便利性形成相应支撑。"
+        )
+    if section_key == "consumption_potential":
+        return (
+            f"消费潜力表现{_score_band(metrics['consumption_potential'])}，"
+            "生活服务设施对日常消费需求形成相应支撑。"
+        )
+    if section_key == "employment_customer_proxy":
+        return (
+            f"就业/办公客群代理表现{_score_band(metrics['employment_customer_proxy'])}，"
+            "办公与活动场景可为门店带来相应客群代理支撑。"
+        )
+    if section_key == "synergy":
+        return (
+            f"共生业态匹配表现{_score_band(metrics['synergy_score'])}，"
+            "周边配套对当前业态形成相应协同条件。"
+        )
+    if section_key == "competition":
+        if diagnosis["competition_alert"] == "过度竞争预警":
+            return (
+                "当前竞争状态已触发过度竞争预警，"
+                "同类设施集聚带来的经营压力需要重点核验。"
+            )
+        return (
+            "当前未触发过度竞争预警，"
+            "但仍需结合现场核验同类设施的经营状态。"
+        )
+    if section_key == "business_atmosphere":
+        return (
+            f"商业氛围表现{_score_band(metrics['business_atmosphere'])}，"
+            "商业类设施集聚度对综合评价形成相应支撑。"
+        )
+    if section_key == "strengths_and_risks":
+        return (
+            f"当前主要优势是{recommendation['main_advantage']}，"
+            f"主要风险是{recommendation['main_risk']}，"
+            "需要围绕这一组合安排现场核验与经营取舍。"
+        )
+    if section_key == "limitations":
+        return (
+            "结论仅适用于当前样本口径下的相对比较，"
+            "真实客流、租金、营收与门店条件仍需现场核验。"
+        )
+    raise InvalidReportContentError(f"未知报告章节：{section_key}")
+
+
+def _fallback_operating_suggestion(
+    basis_fields: Any,
+    report_payload: Mapping[str, Any],
+) -> str:
+    recommendation = report_payload["recommendation"]
+    if isinstance(basis_fields, list):
+        if "recommendation.main_advantage" in basis_fields:
+            return (
+                f"围绕{recommendation['main_advantage']}对应条件做优先核验，"
+                "并据此优化门店经营设计。"
+            )
+        if "recommendation.main_risk" in basis_fields:
+            return (
+                f"针对{recommendation['main_risk']}提前设计差异化经营与现场核验清单。"
+            )
+    return "结合现场调研结果完善门店经营方案与风险应对安排。"
+
+
+def repair_model_analysis_numbers(
+    content: Any,
+    report_payload: Mapping[str, Any],
+) -> dict[str, Any]:
+    """Replace numeric model narratives with deterministic non-numeric text."""
+    analysis = _decode_report_analysis(content)
+    sections = analysis.get("sections")
+    if not isinstance(sections, dict):
+        return analysis
+    for key in REPORT_SECTION_KEYS:
+        section = sections.get(key)
+        if not isinstance(section, dict):
+            continue
+        if key == "operating_suggestions":
+            items = section.get("items")
+            if not isinstance(items, list):
+                continue
+            for item in items:
+                if not isinstance(item, dict):
+                    continue
+                suggestion = item.get("suggestion")
+                if (
+                    isinstance(suggestion, str)
+                    and MODEL_NUMBER_PATTERN.search(suggestion)
+                ):
+                    item["suggestion"] = _fallback_operating_suggestion(
+                        item.get("basis_fields"),
+                        report_payload,
+                    )
+            continue
+        text = section.get("analysis")
+        if isinstance(text, str) and MODEL_NUMBER_PATTERN.search(text):
+            section["analysis"] = _fallback_section_analysis(
+                key,
+                report_payload,
+            )
+    return analysis
+
+
 def _validate_evidence_fields(
     values: Any,
     allowed: set[str],
@@ -541,16 +706,7 @@ def _validate_evidence_fields(
 
 def validate_report_analysis(content: Any) -> dict[str, Any]:
     """Parse and validate one evidence-grounded report-analysis JSON."""
-    if not isinstance(content, str) or not content.strip():
-        raise EmptyReportAnalysisError("DeepSeek 返回的结构化分析为空")
-    try:
-        analysis = json.loads(content)
-    except json.JSONDecodeError as exc:
-        raise InvalidReportContentError(
-            "DeepSeek 返回内容不是有效 JSON"
-        ) from exc
-    if not isinstance(analysis, dict):
-        raise InvalidReportContentError("DeepSeek 分析顶层必须是 JSON 对象")
+    analysis = _decode_report_analysis(content)
     if analysis.get("schema_version") != "1.0":
         raise InvalidReportContentError(
             "DeepSeek 分析 schema_version 必须为 1.0"
@@ -688,6 +844,7 @@ def _call_model(
     client: Any,
     model: str,
     prompt: str,
+    report_payload: Mapping[str, Any],
 ) -> dict[str, Any]:
     completion = client.chat.completions.create(
         model=model,
@@ -710,19 +867,21 @@ def _call_model(
         if choices and getattr(choices[0], "message", None)
         else None
     )
-    return validate_report_analysis(content)
+    repaired = repair_model_analysis_numbers(content, report_payload)
+    return validate_report_analysis(repaired)
 
 
 def _call_model_with_empty_retry(
     client: Any,
     model: str,
     prompt: str,
+    report_payload: Mapping[str, Any],
 ) -> dict[str, Any]:
     """Retry one empty JSON response with the same model."""
     try:
-        return _call_model(client, model, prompt)
+        return _call_model(client, model, prompt, report_payload)
     except EmptyReportAnalysisError:
-        return _call_model(client, model, prompt)
+        return _call_model(client, model, prompt, report_payload)
 
 
 def _format_number(value: Any) -> str:
@@ -953,9 +1112,15 @@ def generate_site_report(
         primary_model,
         fallback_model,
     )
-    prompt = build_report_prompt(record, profile, official_context)
+    report_payload = build_report_payload(record, profile, official_context)
+    prompt = build_report_prompt_from_payload(report_payload)
     try:
-        analysis = _call_model_with_empty_retry(client, primary, prompt)
+        analysis = _call_model_with_empty_retry(
+            client,
+            primary,
+            prompt,
+            report_payload,
+        )
         content = render_report_markdown(
             record,
             profile,
@@ -974,7 +1139,12 @@ def generate_site_report(
         if not _is_retryable_error(error):
             raise
 
-    analysis = _call_model_with_empty_retry(client, fallback, prompt)
+    analysis = _call_model_with_empty_retry(
+        client,
+        fallback,
+        prompt,
+        report_payload,
+    )
     content = render_report_markdown(
         record,
         profile,

@@ -1427,6 +1427,15 @@ streamlit run src/app.py
 - 前端页面
 - 演示步骤
 
+同步 docs/系统架构说明.md：
+- 当前交付按五层架构说明：数据层、管线层、模型层、报告层、前端层。
+- 数据层对应 `data/` 与 `outputs/`。
+- 管线层对应 `src/pipeline/`。
+- 模型层对应 `src/modeling/`。
+- 报告层对应 `src/presentation/`。
+- 前端层对应 `src/app.py` 与 `src/web/`。
+- `src/core/` 与 `config.yaml` 作为横向支撑，不作为单独业务层。
+
 新增 docs/5分钟演示脚本.md：
 演示逻辑：
 传统选址痛点
