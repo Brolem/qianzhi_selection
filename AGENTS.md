@@ -207,3 +207,10 @@
 - 改动文件：`D:\Users\Desktop\GZAICp\qianzhi_selection\README.md`；`D:\Users\Desktop\GZAICp\qianzhi_selection\docs\系统架构说明.md`；`D:\Users\Desktop\GZAICp\qianzhi_selection\docs\技术路线草图.md`；`D:\Users\Desktop\GZAICp\qianzhi_selection\docs\黔址优选_v2项目说明材料.md`；`D:\Users\Desktop\GZAICp\qianzhi_selection\docs\项目结构说明.md`；`D:\Users\Desktop\GZAICp\qianzhi_selection\docs\推荐项目方案.md`；`D:\Users\Desktop\GZAICp\qianzhi_selection\docs\文档索引.md`；`D:\Users\Desktop\GZAICp\qianzhi_selection\docs\最终交付清单.md`；`D:\Users\Desktop\GZAICp\qianzhi_selection\黔址优选_Codex多步执行指令.md`；`D:\Users\Desktop\GZAICp\qianzhi_selection\AGENTS.md`。
 - 依据：用户明确要求“更新各级文档”并绘制五层系统架构图；已读取真实源码目录 `src\core\`、`src\pipeline\`、`src\modeling\`、`src\presentation\`、`src\web\`，以及当前 README、系统架构说明、技术路线、项目结构说明、项目说明材料、推荐项目方案、最终交付清单和总控文档。当前稳定入口仍为 `python scripts/run_pipeline.py` 与 `streamlit run src/app.py`。
 - 验证：已运行 Markdown 标题结构扫描，确认更新文档标题可检索；已运行架构术语扫描，确认当前主线文档已出现数据层、管线层、模型层、报告层和前端层，并且 `系统架构说明.md`、`技术路线草图.md` 与 `推荐项目方案.md` 均包含 Mermaid 架构图。后续 `git diff --check` 与 `git status --short` 结果见本轮最终回复。
+
+### 2026-06-17 13:01
+
+- 功能：根据用户对架构图的反馈，重绘五层系统架构图为项目专用图片资产。新图不在图面标注源码路径、数据路径或脚本路径，只展示数据层、管线层、模型层、报告层、前端层的业务模块、数据规模和成果关系；同时调整模块框文字为短句，确保文字位于框内。文档引用改为 PNG 图片，保留 SVG 作为可编辑源文件。
+- 改动文件：`D:\Users\Desktop\GZAICp\qianzhi_selection\docs\assets\qianzhi_v2_five_layer_architecture.svg`；`D:\Users\Desktop\GZAICp\qianzhi_selection\docs\assets\qianzhi_v2_five_layer_architecture.png`；`D:\Users\Desktop\GZAICp\qianzhi_selection\docs\系统架构说明.md`；`D:\Users\Desktop\GZAICp\qianzhi_selection\docs\推荐项目方案.md`；`D:\Users\Desktop\GZAICp\qianzhi_selection\docs\黔址优选_v2项目说明材料.md`；`D:\Users\Desktop\GZAICp\qianzhi_selection\AGENTS.md`。
+- 依据：用户明确指出图不应只是单纯五框图，而应根据项目文档说明每层具体内容，并要求图面不标注文件路径、文字位于框内；已读取当前 `docs\系统架构说明.md` 和真实源码分层。绘图内容采用当前 v2 主线的真实业务模块和数据规模：三区、790 个空间网格、60 个样本网格、15 类设施计数、六维评分、区域诊断、地图成果和 11 章报告。
+- 验证：已用本机 Edge 无头截图把 SVG 导出为 PNG，并用图片预览检查图面；已运行 `rg -n "src/|src\\|data/|data\\|outputs/|outputs\\|scripts/|scripts\\|config.yaml|\.py" docs\assets\qianzhi_v2_five_layer_architecture.svg`，结果无命中，确认图面文本不含源码路径、数据路径和脚本路径；已确认三个主线文档引用 PNG 图片，并保留 SVG 源文件说明。

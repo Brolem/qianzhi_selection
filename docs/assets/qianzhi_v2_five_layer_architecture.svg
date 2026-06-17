@@ -1,0 +1,196 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="1080" viewBox="0 0 1600 1080" role="img" aria-labelledby="title desc">
+  <title id="title">黔址优选 v2 五层系统架构图</title>
+  <desc id="desc">展示黔址优选 v2 的数据层、管线层、模型层、报告层和前端层，以及配置管理和一键运行编排。</desc>
+  <defs>
+    <style>
+      .canvas { fill: #f5f7fb; }
+      .title { font-family: "Microsoft YaHei", "PingFang SC", Arial, sans-serif; font-size: 34px; font-weight: 700; fill: #0f172a; }
+      .subtitle { font-family: "Microsoft YaHei", "PingFang SC", Arial, sans-serif; font-size: 18px; fill: #52627a; }
+      .layer-title { font-family: "Microsoft YaHei", "PingFang SC", Arial, sans-serif; font-size: 26px; font-weight: 700; fill: #10203a; }
+      .layer-note { font-family: "Microsoft YaHei", "PingFang SC", Arial, sans-serif; font-size: 15px; fill: #52627a; }
+      .card-title { font-family: "Microsoft YaHei", "PingFang SC", Arial, sans-serif; font-size: 18px; font-weight: 700; fill: #10203a; }
+      .card-text { font-family: "Microsoft YaHei", "PingFang SC", Arial, sans-serif; font-size: 14px; fill: #3d4b63; }
+      .tiny { font-family: "Microsoft YaHei", "PingFang SC", Arial, sans-serif; font-size: 13px; fill: #52627a; }
+      .layer { stroke: #d5dde8; stroke-width: 1.3; rx: 18; }
+      .card { fill: #ffffff; stroke: #c8d3e1; stroke-width: 1.2; rx: 13; }
+      .data-card { fill: #ffffff; stroke: #aebbd0; stroke-width: 1.3; rx: 13; }
+      .support { fill: #fff7ed; stroke: #f3b16e; stroke-width: 1.4; rx: 16; }
+      .runner { fill: #eef6ff; stroke: #7db7ee; stroke-width: 1.4; rx: 16; }
+      .arrow { stroke: #475569; stroke-width: 2.4; fill: none; marker-end: url(#arrowhead); }
+      .soft-arrow { stroke: #64748b; stroke-width: 1.7; fill: none; marker-end: url(#softArrow); stroke-dasharray: 7 6; }
+      .caption { font-family: "Microsoft YaHei", "PingFang SC", Arial, sans-serif; font-size: 15px; fill: #475569; }
+    </style>
+    <marker id="arrowhead" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto">
+      <path d="M2,2 L10,6 L2,10 Z" fill="#475569"/>
+    </marker>
+    <marker id="softArrow" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto">
+      <path d="M2,2 L10,6 L2,10 Z" fill="#64748b"/>
+    </marker>
+    <filter id="shadow" x="-5%" y="-10%" width="110%" height="125%">
+      <feDropShadow dx="0" dy="3" stdDeviation="5" flood-color="#0f172a" flood-opacity="0.10"/>
+    </filter>
+  </defs>
+
+  <rect class="canvas" x="0" y="0" width="1600" height="1080"/>
+
+  <text class="title" x="64" y="58">黔址优选 v2 五层系统架构</text>
+  <text class="subtitle" x="64" y="88">区县背景约束下的网格级多因子商业选址推荐模型</text>
+
+  <rect class="support" x="64" y="116" width="336" height="92" filter="url(#shadow)"/>
+  <text class="card-title" x="88" y="150">横向支撑</text>
+  <text class="card-text" x="88" y="176">统一配置 · 评分方案 · 权重模板</text>
+  <text class="tiny" x="88" y="197">为管线、模型、报告和前端提供同一口径</text>
+
+  <rect class="runner" x="1210" y="116" width="326" height="92" filter="url(#shadow)"/>
+  <text class="card-title" x="1234" y="150">一键运行编排</text>
+  <text class="card-text" x="1234" y="176">离线复现 · 在线刷新 · 启动工作台</text>
+  <text class="tiny" x="1234" y="197">阶段失败即停止，不隐藏外部依赖问题</text>
+
+  <!-- Frontend layer -->
+  <rect class="layer" x="64" y="238" width="1472" height="138" fill="#eef8f2"/>
+  <text class="layer-title" x="92" y="281">前端层</text>
+  <text class="layer-note" x="92" y="309">七页选址工作台</text>
+
+  <rect class="card" x="304" y="258" width="238" height="88" filter="url(#shadow)"/>
+  <text class="card-title" x="328" y="291">入口与导航</text>
+  <text class="card-text" x="328" y="318">七页页面注册</text>
+  <text class="tiny" x="328" y="338">统一进入工作台</text>
+
+  <rect class="card" x="582" y="258" width="318" height="88" filter="url(#shadow)"/>
+  <text class="card-title" x="606" y="291">七页工作台</text>
+  <text class="card-text" x="606" y="318">总览 · 数据 · 区域 · 推荐</text>
+  <text class="tiny" x="606" y="338">地图 · 报告 · 项目说明</text>
+
+  <rect class="card" x="940" y="258" width="242" height="88" filter="url(#shadow)"/>
+  <text class="card-title" x="964" y="291">共享视觉组件</text>
+  <text class="card-text" x="964" y="318">标题栏 · 卡片 · 图例</text>
+  <text class="tiny" x="964" y="338">统一样式与信息密度</text>
+
+  <rect class="card" x="1222" y="258" width="246" height="88" filter="url(#shadow)"/>
+  <text class="card-title" x="1246" y="291">页面联动状态</text>
+  <text class="card-text" x="1246" y="318">评分方案 · 网格选择</text>
+  <text class="tiny" x="1246" y="338">推荐、地图、报告同步</text>
+
+  <!-- Report layer -->
+  <rect class="layer" x="64" y="402" width="1472" height="142" fill="#eef6ff"/>
+  <text class="layer-title" x="92" y="448">报告层</text>
+  <text class="layer-note" x="92" y="476">地图与报告成果</text>
+
+  <rect class="card" x="304" y="422" width="286" height="92" filter="url(#shadow)"/>
+  <text class="card-title" x="328" y="456">地图生成</text>
+  <text class="card-text" x="328" y="483">高德地图主链</text>
+  <text class="tiny" x="328" y="504">兼容地图回退 · Top 标记</text>
+
+  <rect class="card" x="630" y="422" width="310" height="92" filter="url(#shadow)"/>
+  <text class="card-title" x="654" y="456">智能报告</text>
+  <text class="card-text" x="654" y="483">结构化大模型分析</text>
+  <text class="tiny" x="654" y="504">模板兜底 · 程序写入真实数值</text>
+
+  <rect class="card" x="980" y="422" width="226" height="92" filter="url(#shadow)"/>
+  <text class="card-title" x="1004" y="456">地图成果</text>
+  <text class="card-text" x="1004" y="483">便利店地图</text>
+  <text class="tiny" x="1004" y="504">轻餐饮地图</text>
+
+  <rect class="card" x="1246" y="422" width="222" height="92" filter="url(#shadow)"/>
+  <text class="card-title" x="1270" y="456">报告成果</text>
+  <text class="card-text" x="1270" y="483">十一章选址报告</text>
+  <text class="tiny" x="1270" y="504">支持预览与下载</text>
+
+  <!-- Model layer -->
+  <rect class="layer" x="64" y="570" width="1472" height="150" fill="#fff7ed"/>
+  <text class="layer-title" x="92" y="618">模型层</text>
+  <text class="layer-note" x="92" y="646">指标 · 评分 · 诊断</text>
+
+  <rect class="card" x="304" y="592" width="256" height="96" filter="url(#shadow)"/>
+  <text class="card-title" x="328" y="626">指标工程</text>
+  <text class="card-text" x="328" y="653">十五类 POI 归一化</text>
+  <text class="tiny" x="328" y="674">形成八项网格指标</text>
+
+  <rect class="card" x="600" y="592" width="244" height="96" filter="url(#shadow)"/>
+  <text class="card-title" x="624" y="626">六维评分</text>
+  <text class="card-text" x="624" y="653">便利店 · 轻餐饮</text>
+  <text class="tiny" x="624" y="674">得分 · 排名 · 推荐等级</text>
+
+  <rect class="card" x="884" y="592" width="264" height="96" filter="url(#shadow)"/>
+  <text class="card-title" x="908" y="626">区域市场诊断</text>
+  <text class="card-text" x="908" y="653">市场空白 · 待培育</text>
+  <text class="tiny" x="908" y="674">成熟商圈 · 竞争预警</text>
+
+  <rect class="card" x="1188" y="592" width="280" height="96" filter="url(#shadow)"/>
+  <text class="card-title" x="1212" y="626">自定义权重</text>
+  <text class="card-text" x="1212" y="653">六项非负权重</text>
+  <text class="tiny" x="1212" y="674">即时预览 · 正式保存</text>
+
+  <!-- Pipeline layer -->
+  <rect class="layer" x="64" y="746" width="1472" height="150" fill="#f0f9ff"/>
+  <text class="layer-title" x="92" y="794">管线层</text>
+  <text class="layer-note" x="92" y="822">数据清洗与采集</text>
+
+  <rect class="card" x="304" y="768" width="230" height="96" filter="url(#shadow)"/>
+  <text class="card-title" x="328" y="802">官方数据清洗</text>
+  <text class="card-text" x="328" y="829">宏观经济背景</text>
+  <text class="tiny" x="328" y="850">就业数据边界说明</text>
+
+  <rect class="card" x="574" y="768" width="218" height="96" filter="url(#shadow)"/>
+  <text class="card-title" x="598" y="802">高德数据接入</text>
+  <text class="card-text" x="598" y="829">行政区划</text>
+  <text class="tiny" x="598" y="850">POI 查询与缓存</text>
+
+  <rect class="card" x="832" y="768" width="214" height="96" filter="url(#shadow)"/>
+  <text class="card-title" x="856" y="802">区县边界</text>
+  <text class="card-text" x="856" y="829">云岩区 · 南明区</text>
+  <text class="tiny" x="856" y="850">观山湖区</text>
+
+  <rect class="card" x="1086" y="768" width="170" height="96" filter="url(#shadow)"/>
+  <text class="card-title" x="1110" y="802">1km 网格</text>
+  <text class="card-text" x="1110" y="829">790 个</text>
+  <text class="tiny" x="1110" y="850">空间评价单元</text>
+
+  <rect class="card" x="1296" y="768" width="172" height="96" filter="url(#shadow)"/>
+  <text class="card-title" x="1320" y="802">POI 统计</text>
+  <text class="card-text" x="1320" y="829">60 个样本网格</text>
+  <text class="tiny" x="1320" y="850">15 类设施计数</text>
+
+  <!-- Data layer -->
+  <rect class="layer" x="64" y="922" width="1472" height="118" fill="#f8fafc"/>
+  <text class="layer-title" x="92" y="968">数据层</text>
+  <text class="layer-note" x="92" y="996">输入 · 处理 · 输出</text>
+
+  <rect class="data-card" x="304" y="942" width="236" height="70" filter="url(#shadow)"/>
+  <text class="card-title" x="328" y="972">输入与缓存</text>
+  <text class="card-text" x="328" y="995">官方数据 · 高德缓存</text>
+
+  <rect class="data-card" x="580" y="942" width="278" height="70" filter="url(#shadow)"/>
+  <text class="card-title" x="604" y="972">主线处理数据</text>
+  <text class="card-text" x="604" y="995">区县 · 网格 · POI · 指标输入</text>
+
+  <rect class="data-card" x="898" y="942" width="246" height="70" filter="url(#shadow)"/>
+  <text class="card-title" x="922" y="972">评分结果</text>
+  <text class="card-text" x="922" y="995">得分 · 排名 · 方案元数据</text>
+
+  <rect class="data-card" x="1184" y="942" width="284" height="70" filter="url(#shadow)"/>
+  <text class="card-title" x="1208" y="972">展示成果</text>
+  <text class="card-text" x="1208" y="995">地图 HTML · Markdown 报告</text>
+
+  <!-- Flow arrows -->
+  <path class="arrow" d="M800 922 L800 902"/>
+  <path class="arrow" d="M800 746 L800 726"/>
+  <path class="arrow" d="M800 570 L800 550"/>
+  <path class="arrow" d="M800 402 L800 382"/>
+
+  <text class="caption" x="824" y="910">处理数据进入指标工程</text>
+  <text class="caption" x="824" y="734">评分与诊断生成结果</text>
+  <text class="caption" x="824" y="558">地图与报告读取同一评分结果</text>
+  <text class="caption" x="824" y="390">前端展示成果与交互状态</text>
+
+  <!-- Support arrows -->
+  <path class="soft-arrow" d="M400 162 C520 162, 520 810, 574 810"/>
+  <path class="soft-arrow" d="M400 162 C540 162, 540 638, 600 638"/>
+  <path class="soft-arrow" d="M400 162 C560 162, 590 468, 630 468"/>
+  <path class="soft-arrow" d="M400 162 C560 162, 610 302, 582 302"/>
+
+  <path class="soft-arrow" d="M1373 208 C1373 370, 1373 585, 1373 768"/>
+  <text class="caption" x="1222" y="230">按阶段调用，失败即停止</text>
+
+  <text class="tiny" x="64" y="1060">边界：官方数据只作省级背景；POI 为 60 个样本网格统一口径样本；结果为网格级相对推荐，不是门牌号级预测。</text>
+</svg>
