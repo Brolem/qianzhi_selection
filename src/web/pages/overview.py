@@ -362,7 +362,7 @@ def render(st_module: Any | None = None) -> None:
     render_page_header(
         st,
         "项目总览",
-        "贵阳市典型区县社区商业智能选址工作台",
+        "黔址优选：城市社区商业价值洞察与智能选址平台",
     )
     st.markdown(
         "系统以区县作为背景约束，以 1km 评价网格作为评分对象，"

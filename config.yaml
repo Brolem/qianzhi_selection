@@ -1,5 +1,5 @@
 project:
-  name: "黔址优选"
+  name: "黔址优选：城市社区商业价值洞察与智能选址平台"
   city: "贵阳市"
   grid_size_m: 1000
   default_radius_m: 500

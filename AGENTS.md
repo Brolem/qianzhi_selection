@@ -214,3 +214,24 @@
 - 改动文件：`D:\Users\Desktop\GZAICp\qianzhi_selection\docs\assets\qianzhi_v2_five_layer_architecture.svg`；`D:\Users\Desktop\GZAICp\qianzhi_selection\docs\assets\qianzhi_v2_five_layer_architecture.png`；`D:\Users\Desktop\GZAICp\qianzhi_selection\docs\系统架构说明.md`；`D:\Users\Desktop\GZAICp\qianzhi_selection\docs\推荐项目方案.md`；`D:\Users\Desktop\GZAICp\qianzhi_selection\docs\黔址优选_v2项目说明材料.md`；`D:\Users\Desktop\GZAICp\qianzhi_selection\AGENTS.md`。
 - 依据：用户明确指出图不应只是单纯五框图，而应根据项目文档说明每层具体内容，并要求图面不标注文件路径、文字位于框内；已读取当前 `docs\系统架构说明.md` 和真实源码分层。绘图内容采用当前 v2 主线的真实业务模块和数据规模：三区、790 个空间网格、60 个样本网格、15 类设施计数、六维评分、区域诊断、地图成果和 11 章报告。
 - 验证：已用本机 Edge 无头截图把 SVG 导出为 PNG，并用图片预览检查图面；已运行 `rg -n "src/|src\\|data/|data\\|outputs/|outputs\\|scripts/|scripts\\|config.yaml|\.py" docs\assets\qianzhi_v2_five_layer_architecture.svg`，结果无命中，确认图面文本不含源码路径、数据路径和脚本路径；已确认三个主线文档引用 PNG 图片，并保留 SVG 源文件说明。
+
+### 2026-06-17 13:22
+
+- 功能：面向比赛提交新增独立材料目录，将既有商业计划书内容改写为项目计划书口径，并新增五层架构说明材料。项目计划书突出项目背景、目标、实施路线、技术路线、应用场景、创新点、风险和交付验收；架构说明围绕数据层、管线层、模型层、报告层和前端层展开，引用当前项目专用五层架构图。本次只修改 Markdown 文档，不修改代码、配置、数据或运行输出。
+- 改动文件：`D:\Users\Desktop\GZAICp\qianzhi_selection\docs\competition_submission\项目计划书.md`；`D:\Users\Desktop\GZAICp\qianzhi_selection\docs\competition_submission\架构说明.md`；`D:\Users\Desktop\GZAICp\qianzhi_selection\docs\文档索引.md`；`D:\Users\Desktop\GZAICp\qianzhi_selection\AGENTS.md`。
+- 依据：用户明确要求比赛需要提交“项目计划书”和“架构说明”两个文档，并要求将已有商业计划书改为项目计划书、查阅网络资料完善、单独放在一个文件夹下；已读取 `docs\商业计划书.md`、`docs\系统架构说明.md`、`docs\黔址优选_v2项目说明材料.md`、`docs\文档索引.md` 和当前五层架构图片资产。外部依据包括贵州省人工智能创业大赛公开报道、赛事宣讲信息、一刻钟便民生活圈公开报道、数字经济发展规划、高德行政区划与 POI 2.0 官方文档、创赛项目计划书参考模板。
+- 验证：已确认 `docs\competition_submission\项目计划书.md` 和 `docs\competition_submission\架构说明.md` 均已生成；已运行提交材料标题结构扫描，确认两个文档均有完整标题层级；已运行本机绝对路径、密钥明文和项目禁用词扫描，提交材料目录无命中；已运行 `git diff --check`，仅出现 Git 换行提示，无格式错误；已运行 `git status --short` 汇总变更。
+
+### 2026-06-17 13:38
+
+- 功能：收敛 `docs` 根目录文档结构，删除重复的过程性方案、旧商业计划书、旧技术草图、旧架构说明、旧执行计划和重复说明材料；保留比赛提交材料、评分计算说明、项目结构说明、最终交付清单、5 分钟演示脚本和文档索引。同步修正 README、最终交付清单、v1 归档说明和文档索引中的引用。本次只整理 Markdown 文档，不修改代码、配置、数据或运行输出。
+- 改动文件：`D:\Users\Desktop\GZAICp\qianzhi_selection\README.md`；`D:\Users\Desktop\GZAICp\qianzhi_selection\docs\文档索引.md`；`D:\Users\Desktop\GZAICp\qianzhi_selection\docs\最终交付清单.md`；`D:\Users\Desktop\GZAICp\qianzhi_selection\docs\competition_submission\项目计划书.md`；`D:\Users\Desktop\GZAICp\qianzhi_selection\docs\competition_submission\架构说明.md`；`D:\Users\Desktop\GZAICp\qianzhi_selection\docs\legacy\v1\初赛方案_v1_legacy.md`；`D:\Users\Desktop\GZAICp\qianzhi_selection\docs\legacy\v1\技术路线草图_v1_legacy.md`；`D:\Users\Desktop\GZAICp\qianzhi_selection\docs\legacy\v1\推荐项目方案_v1_legacy.md`；`D:\Users\Desktop\GZAICp\qianzhi_selection\docs\legacy\v1\项目执行计划_v1_legacy.md`；`D:\Users\Desktop\GZAICp\qianzhi_selection\AGENTS.md`；删除 `D:\Users\Desktop\GZAICp\qianzhi_selection\docs\商业计划书.md`、`初赛方案_新版.md`、`方法调整说明.md`、`技术路线草图.md`、`推荐项目方案.md`、`系统架构说明.md`、`项目执行计划.md`、`黔址优选_v2项目说明材料.md` 和重复目录 `docs\docs_sub\`。
+- 依据：用户截图反馈 `docs` 下文档重复，明确要求“整合、保留核心的，删掉多余的”；已盘点 `docs` 根目录 Markdown、当前引用、README、最终交付清单、v1 归档说明和比赛提交材料。保留核心集为：`docs\competition_submission\` 两份提交材料、`网格推荐全流程与评分计算说明.md`、`项目结构说明.md`、`最终交付清单.md`、`5分钟演示脚本.md`、`文档索引.md`、`history\` 和 `legacy\v1\`。
+- 验证：整理后运行目录和引用检查，确认 `docs` 根目录只保留 5 个核心 Markdown，比赛提交目录保留 2 个 Markdown，重复目录 `docs\docs_sub\` 已删除；后续运行标题、失效引用、隐私、格式和 Git 状态检查，结果见本轮最终回复。
+
+### 2026-06-17 13:53
+
+- 功能：将当前主线前端页面、配置项目名称、地图 HTML 标题、README、比赛提交文档和五层架构图标题统一改为“黔址优选：城市社区商业价值洞察与智能选址平台”。历史归档、历史记录和总控文件名中的旧称保留用于追溯。
+- 改动文件：`D:\Users\Desktop\GZAICp\qianzhi_selection\config.yaml`；`D:\Users\Desktop\GZAICp\qianzhi_selection\src\app.py`；`D:\Users\Desktop\GZAICp\qianzhi_selection\src\web\ui\workbench.py`；`D:\Users\Desktop\GZAICp\qianzhi_selection\src\web\pages\overview.py`；`D:\Users\Desktop\GZAICp\qianzhi_selection\src\presentation\map_viz.py`；`D:\Users\Desktop\GZAICp\qianzhi_selection\tests\core\test_config.py`；`D:\Users\Desktop\GZAICp\qianzhi_selection\tests\web\test_app.py`；`D:\Users\Desktop\GZAICp\qianzhi_selection\README.md`；`D:\Users\Desktop\GZAICp\qianzhi_selection\docs\competition_submission\项目计划书.md`；`D:\Users\Desktop\GZAICp\qianzhi_selection\docs\competition_submission\架构说明.md`；`D:\Users\Desktop\GZAICp\qianzhi_selection\docs\assets\qianzhi_v2_five_layer_architecture.svg`；`D:\Users\Desktop\GZAICp\qianzhi_selection\docs\assets\qianzhi_v2_five_layer_architecture.png`；`D:\Users\Desktop\GZAICp\qianzhi_selection\AGENTS.md`。
+- 依据：用户明确要求“将前端页面和各个文档的项目标题改为 *黔址优选：城市社区商业价值洞察与智能选址平台*”；已通过扫描确认真实标题位置包括 `src\app.py` 的 `page_title`、`src\web\ui\workbench.py` 的 `BRAND_TITLE`、首页说明、地图 HTML 标题、`config.yaml` 项目名称、README 和提交材料标题。
+- 验证：已重新生成并预览五层架构 PNG，确认图片顶部新标题中文正常显示且未溢出；已运行旧标题精确扫描，当前主线无旧标题命中；已运行 `python -m unittest tests.core.test_config tests.web.test_app tests.web.test_workbench_ui -v`，31 项通过；已运行 `python -m unittest discover -s tests -v`，186 项通过；已运行递归 `src` AST 语法检查，输出 `syntax ok`；已运行 `git diff --check`，仅出现 Git 换行提示，无格式错误。

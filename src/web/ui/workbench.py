@@ -7,7 +7,7 @@ import re
 from typing import Any, Iterable
 
 
-BRAND_TITLE = "黔址优选 | 社区商业智能选址决策系统"
+BRAND_TITLE = "黔址优选：城市社区商业价值洞察与智能选址平台"
 
 WORKBENCH_CSS = """
 :root {

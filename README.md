@@ -1,4 +1,4 @@
-# 黔址优选：贵阳市典型区县社区商业智能选址原型
+# 黔址优选：城市社区商业价值洞察与智能选址平台
 
 ## 项目定位
 
@@ -77,7 +77,7 @@ qianzhi_selection/
 | 报告层 | 生成高德地图 HTML、Folium 兼容地图和结构化选址报告 | `src/presentation/` |
 | 前端层 | 提供七页 Streamlit 工作台、跨页面选择状态和统一视觉组件 | `src/app.py`、`src/web/` |
 
-完整 Mermaid 架构图见 [系统架构说明](docs/系统架构说明.md)。
+完整五层架构说明见 [架构说明](docs/competition_submission/架构说明.md)。
 
 ## 安装
 

@@ -468,11 +468,19 @@ class AppHelperTests(unittest.TestCase):
 
         self.assertEqual(
             st.page_config_calls,
-            [{"page_title": "黔址优选", "layout": "wide"}],
+            [
+                {
+                    "page_title": "黔址优选：城市社区商业价值洞察与智能选址平台",
+                    "layout": "wide",
+                }
+            ],
         )
         self.assertEqual(len(st.html_calls), 2)
         self.assertIn("<style>", st.html_calls[0])
-        self.assertIn("黔址优选 | 社区商业智能选址决策系统", st.html_calls[1])
+        self.assertIn(
+            "黔址优选：城市社区商业价值洞察与智能选址平台",
+            st.html_calls[1],
+        )
         self.assertEqual(st.controller.run_count, 1)
 
     def test_render_map_page_uses_dynamic_profile_selector_and_st_folium(self):

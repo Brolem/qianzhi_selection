@@ -98,7 +98,7 @@ def main() -> None:
 def run_workbench(st: Any) -> None:
     """Apply the shared shell before running page navigation."""
     st.set_page_config(
-        page_title="黔址优选",
+        page_title="黔址优选：城市社区商业价值洞察与智能选址平台",
         layout="wide",
     )
     apply_workbench_theme(st)

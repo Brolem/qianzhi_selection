@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1600" height="1080" viewBox="0 0 1600 1080" role="img" aria-labelledby="title desc">
-  <title id="title">黔址优选 v2 五层系统架构图</title>
-  <desc id="desc">展示黔址优选 v2 的数据层、管线层、模型层、报告层和前端层，以及配置管理和一键运行编排。</desc>
+  <title id="title">黔址优选：城市社区商业价值洞察与智能选址平台五层系统架构图</title>
+  <desc id="desc">展示黔址优选：城市社区商业价值洞察与智能选址平台的数据层、管线层、模型层、报告层和前端层，以及配置管理和一键运行编排。</desc>
   <defs>
     <style>
       .canvas { fill: #f5f7fb; }
@@ -33,7 +33,7 @@
 
   <rect class="canvas" x="0" y="0" width="1600" height="1080"/>
 
-  <text class="title" x="64" y="58">黔址优选 v2 五层系统架构</text>
+  <text class="title" x="64" y="58">黔址优选：城市社区商业价值洞察与智能选址平台</text>
   <text class="subtitle" x="64" y="88">区县背景约束下的网格级多因子商业选址推荐模型</text>
 
   <rect class="support" x="64" y="116" width="336" height="92" filter="url(#shadow)"/>

@@ -735,7 +735,7 @@ def build_amap_map_html(
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>黔址优选地图</title>
+  <title>黔址优选：城市社区商业价值洞察与智能选址平台地图</title>
   <style>
     html,body,#map{width:100%;height:100%;margin:0;background:#f3f5f8}
     body{height:__MAP_HEIGHT__px;font-family:"Microsoft YaHei",Arial,sans-serif}

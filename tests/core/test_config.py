@@ -9,7 +9,10 @@ class ConfigHelperTests(unittest.TestCase):
     def test_v2_config_sections_and_values_are_present(self):
         cfg = config_module.load_config()
 
-        self.assertEqual(cfg["project"]["name"], "黔址优选")
+        self.assertEqual(
+            cfg["project"]["name"],
+            "黔址优选：城市社区商业价值洞察与智能选址平台",
+        )
         self.assertEqual(cfg["project"]["city"], "贵阳市")
         self.assertEqual(cfg["project"]["grid_size_m"], 1000)
         self.assertEqual(cfg["project"]["default_radius_m"], 500)
